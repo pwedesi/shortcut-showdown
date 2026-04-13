@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Shortcut Showdown API
 
-## Getting Started
+Backend and HTTP surface for **Shortcut Showdown**, implemented with the [Next.js](https://nextjs.org) App Router. The stack uses **TypeScript**, **React 19**, and **Tailwind CSS** for any app-facing routes and tooling.
 
-First, run the development server:
+## Requirements
+
+- Node.js (LTS recommended)
+- [pnpm](https://pnpm.io) (see `package.json` → `packageManager` for the version Corepack should use)
+
+## Setup
+
+Install dependencies:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Command       | Description              |
+| ------------- | ------------------------ |
+| `pnpm dev` | Start the dev server     |
+| `pnpm build` | Production build       |
+| `pnpm start`   | Run the production server |
+| `pnpm lint` | Run ESLint              |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Local development defaults to [http://localhost:3000](http://localhost:3000).
 
-## Learn More
+## Project layout
 
-To learn more about Next.js, take a look at the following resources:
+- `app/` — App Router entry (`layout.tsx`, `page.tsx`, and future API routes under `app/api/` as you add them)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 👥 Team
 
-## Deploy on Vercel
+<div align="center">
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+<table>
+<tr>
+<td align="center" width="50%" valign="top">
+  <img src="https://github.com/hdmGOAT.png" width="88" height="88" alt="Hans Matthew Del Mundo" /><br />
+  <strong>Hans Matthew Del Mundo</strong><br />
+  <a href="https://github.com/hdmGOAT"><kbd>@hdmGOAT</kbd></a>
+</td>
+<td align="center" width="50%" valign="top">
+  <img src="https://github.com/potakaaa.png" width="88" height="88" alt="Gerald Helbiro Jr." /><br />
+  <strong>Gerald Helbiro Jr.</strong><br />
+  <a href="https://github.com/potakaaa"><kbd>@potakaaa</kbd></a>
+</td>
+</tr>
+<tr>
+<td align="center" width="50%" valign="top">
+  <img src="https://github.com/areeesss.png" width="88" height="88" alt="Vin Marcus Gerebise" /><br />
+  <strong>Vin Marcus Gerebise</strong><br />
+  <a href="https://github.com/areeesss"><kbd>@areeesss</kbd></a>
+</td>
+<td align="center" width="50%" valign="top">
+  <img src="https://github.com/unripelo.png" width="88" height="88" alt="Ira Chloie Narisma" /><br />
+  <strong>Ira Chloie Narisma</strong><br />
+  <a href="https://github.com/unripelo"><kbd>@unripelo</kbd></a>
+</td>
+</tr>
+</table>
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+</div>
