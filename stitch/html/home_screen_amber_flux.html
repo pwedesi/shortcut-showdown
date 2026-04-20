@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Shortcut Showdown - Home</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-container": "#003457",
+                    "surface-container-highest": "#353534",
+                    "on-secondary": "#452b00",
+                    "outline": "#a98a7c",
+                    "on-tertiary-fixed-variant": "#004a78",
+                    "on-background": "#e5e2e1",
+                    "inverse-surface": "#e5e2e1",
+                    "surface-variant": "#353534",
+                    "secondary": "#ffcf8f",
+                    "surface-container-lowest": "#0e0e0e",
+                    "surface-container-high": "#2a2a2a",
+                    "on-secondary-fixed": "#291800",
+                    "outline-variant": "#594136",
+                    "background": "#131313",
+                    "on-primary": "#562000",
+                    "inverse-primary": "#9f4200",
+                    "on-surface-variant": "#e2bfb0",
+                    "tertiary-fixed": "#cfe5ff",
+                    "error-container": "#93000a",
+                    "tertiary-container": "#00a0fc",
+                    "primary-container": "#ff6d00",
+                    "on-secondary-container": "#684300",
+                    "surface-bright": "#3a3939",
+                    "surface-dim": "#131313",
+                    "on-error-container": "#ffdad6",
+                    "primary-fixed-dim": "#ffb692",
+                    "secondary-fixed-dim": "#ffb950",
+                    "primary-fixed": "#ffdbcb",
+                    "on-primary-fixed-variant": "#7a3000",
+                    "primary": "#ffb692",
+                    "on-primary-fixed": "#341100",
+                    "inverse-on-surface": "#313030",
+                    "on-surface": "#e5e2e1",
+                    "surface": "#131313",
+                    "on-tertiary-fixed": "#001d34",
+                    "secondary-fixed": "#ffddb3",
+                    "secondary-container": "#feaa00",
+                    "on-primary-container": "#582100",
+                    "surface-container": "#201f1f",
+                    "error": "#ffb4ab",
+                    "surface-tint": "#ffb692",
+                    "on-secondary-fixed-variant": "#624000",
+                    "surface-container-low": "#1c1b1b",
+                    "on-tertiary": "#003355",
+                    "tertiary": "#99cbff",
+                    "on-error": "#690005",
+                    "tertiary-fixed-dim": "#99cbff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {},
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Space Grotesk"],
+                    "label": ["Space Grotesk"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Space Grotesk', sans-serif; }
+        .glass-panel {
+            background-color: rgba(42, 42, 42, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+        .glow-text {
+            text-shadow: 0 0 20px rgba(255, 109, 0, 0.5);
+        }
+        .glow-box {
+            box-shadow: 0 0 30px rgba(255, 182, 146, 0.08);
+        }
+        .bg-grid-pattern {
+            background-image: 
+                linear-gradient(to right, rgba(89, 65, 54, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(89, 65, 54, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+    </style>
+</head>
+<body class="bg-surface-container-lowest text-on-surface h-screen w-screen overflow-hidden relative selection:bg-primary-container selection:text-on-primary-container">
+<!-- Ambient Background / Floating Keys Elements -->
+<div class="absolute inset-0 z-0 bg-grid-pattern pointer-events-none"></div>
+<div class="absolute top-1/4 left-1/4 w-96 h-96 bg-primary-container rounded-full blur-[150px] opacity-10 pointer-events-none"></div>
+<div class="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-secondary-container rounded-full blur-[200px] opacity-[0.08] pointer-events-none"></div>
+<!-- Main Content Container -->
+<main class="relative z-10 w-full h-full flex flex-col items-center justify-center px-4 md:px-8">
+<!-- Hero Section -->
+<div class="flex flex-col items-center mb-16 relative">
+<h1 class="font-headline text-5xl md:text-7xl font-black italic tracking-tighter text-primary-container uppercase glow-text text-center leading-none">
+                SHORTCUT<br/>SHOWDOWN
+            </h1>
+<p class="font-body text-primary font-medium tracking-widest uppercase mt-6 text-sm md:text-base opacity-90 text-center">
+                Race using real keyboard knowledge
+            </p>
+</div>
+<!-- Interactive Hub -->
+<div class="glass-panel w-full max-w-md p-8 rounded glow-box border border-outline-variant/15 flex flex-col gap-8 relative overflow-hidden">
+<!-- decorative accent -->
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary-container to-transparent opacity-50"></div>
+<!-- Nickname Input -->
+<div class="flex flex-col gap-2">
+<label class="font-label text-xs uppercase tracking-widest text-on-surface-variant" for="nickname">Player Callsign</label>
+<div class="relative group">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 text-primary material-symbols-outlined opacity-70">terminal</span>
+<input class="w-full bg-surface-container-lowest text-on-surface font-body text-lg py-4 pl-12 pr-4 rounded outline-none transition-all focus:bg-surface-container-high border-l-2 border-l-transparent focus:border-l-primary focus:ring-0 focus:outline-none placeholder-on-surface/30 group-hover:bg-surface-container/50" id="nickname" placeholder="ENTER NICKNAME_" type="text" value="OPERATOR_01"/>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-col gap-4 mt-2">
+<!-- Primary Action -->
+<button class="w-full relative group overflow-hidden rounded bg-gradient-to-br from-primary-container to-primary text-on-primary-container font-headline font-bold text-lg uppercase tracking-wider py-4 transition-all duration-300 hover:shadow-[inset_0_0_20px_rgba(255,255,255,0.3),0_0_30px_rgba(255,109,0,0.4)] active:scale-[0.98]">
+<div class="flex items-center justify-center gap-2">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+<span>Quick Play</span>
+</div>
+</button>
+<!-- Secondary Actions Grid -->
+<div class="grid grid-cols-2 gap-4">
+<button class="w-full bg-transparent border border-outline-variant/20 text-on-surface font-headline font-semibold text-sm uppercase tracking-wide py-3 rounded transition-all duration-200 hover:bg-surface-container-highest hover:border-primary/30 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">add_box</span>
+                        Create Lobby
+                    </button>
+<button class="w-full bg-transparent border border-outline-variant/20 text-on-surface font-headline font-semibold text-sm uppercase tracking-wide py-3 rounded transition-all duration-200 hover:bg-surface-container-highest hover:border-primary/30 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">login</span>
+                        Join Lobby
+                    </button>
+</div>
+</div>
+<!-- telemetry stats mini -->
+<div class="mt-4 pt-4 border-t border-outline-variant/10 flex justify-between items-center text-xs font-label uppercase tracking-widest text-on-surface-variant/60">
+<span>V 2.4.1</span>
+<span class="flex items-center gap-1 text-primary/80"><span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span> SERVER ONLINE</span>
+</div>
+</div>
+</main>
+</body></html>

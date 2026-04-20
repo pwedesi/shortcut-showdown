@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Shortcut Showdown - Gameplay</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-container": "#003457",
+                    "surface-container-highest": "#353534",
+                    "on-secondary": "#452b00",
+                    "outline": "#a98a7c",
+                    "on-tertiary-fixed-variant": "#004a78",
+                    "on-background": "#e5e2e1",
+                    "inverse-surface": "#e5e2e1",
+                    "surface-variant": "#353534",
+                    "secondary": "#ffcf8f",
+                    "surface-container-lowest": "#0e0e0e",
+                    "surface-container-high": "#2a2a2a",
+                    "on-secondary-fixed": "#291800",
+                    "outline-variant": "#594136",
+                    "background": "#131313",
+                    "on-primary": "#562000",
+                    "inverse-primary": "#9f4200",
+                    "on-surface-variant": "#e2bfb0",
+                    "tertiary-fixed": "#cfe5ff",
+                    "error-container": "#93000a",
+                    "tertiary-container": "#00a0fc",
+                    "primary-container": "#ff6d00",
+                    "on-secondary-container": "#684300",
+                    "surface-bright": "#3a3939",
+                    "surface-dim": "#131313",
+                    "on-error-container": "#ffdad6",
+                    "primary-fixed-dim": "#ffb692",
+                    "secondary-fixed-dim": "#ffb950",
+                    "primary-fixed": "#ffdbcb",
+                    "on-primary-fixed-variant": "#7a3000",
+                    "primary": "#ffb692",
+                    "on-primary-fixed": "#341100",
+                    "inverse-on-surface": "#313030",
+                    "on-surface": "#e5e2e1",
+                    "surface": "#131313",
+                    "on-tertiary-fixed": "#001d34",
+                    "secondary-fixed": "#ffddb3",
+                    "secondary-container": "#feaa00",
+                    "on-primary-container": "#582100",
+                    "surface-container": "#201f1f",
+                    "error": "#ffb4ab",
+                    "surface-tint": "#ffb692",
+                    "on-secondary-fixed-variant": "#624000",
+                    "surface-container-low": "#1c1b1b",
+                    "on-tertiary": "#003355",
+                    "tertiary": "#99cbff",
+                    "on-error": "#690005",
+                    "tertiary-fixed-dim": "#99cbff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {},
+            "fontFamily": {
+                    "headline": [
+                            "Space Grotesk"
+                    ],
+                    "body": [
+                            "Space Grotesk"
+                    ],
+                    "label": [
+                            "Space Grotesk"
+                    ]
+            }
+        },
+        },
+      }
+    </script>
+<style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        /* Focus state style from instructions */
+        .terminal-input:focus {
+            outline: none;
+            background-color: #2a2a2a; /* surface-container-high */
+            box-shadow: inset 2px 0 0 0 #ffb692; /* primary Focus Bar */
+        }
+        /* Custom Amber Glow */
+        .amber-glow {
+            box-shadow: 0 0 20px rgba(255, 109, 0, 0.15);
+        }
+        .text-glow {
+            text-shadow: 0 0 10px rgba(255, 109, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-surface-container-lowest text-on-surface min-h-screen flex flex-col font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<nav class="flex justify-between items-center w-full px-8 h-16 z-50 bg-[#131313] shadow-[0_4px_20px_rgba(255,109,0,0.05)] border-b-0 sticky top-0 full-width">
+<div class="text-xl font-black italic tracking-tighter text-[#ff6d00] uppercase font-['Space_Grotesk']">
+            SHORTCUT SHOWDOWN
+        </div>
+<div class="hidden md:flex gap-8 items-center h-full">
+<a class="font-['Space_Grotesk'] tracking-tight uppercase text-[#ffb692] border-b-2 border-[#ff6d00] pb-1 hover:text-[#ffb692] transition-all duration-200 active:scale-95 duration-100 flex items-center h-full pt-1" href="#">Race</a>
+<a class="font-['Space_Grotesk'] tracking-tight uppercase text-[#e5e2e1] opacity-60 hover:text-[#ffb692] transition-all duration-200 active:scale-95 duration-100 flex items-center h-full" href="#">Leaderboard</a>
+<a class="font-['Space_Grotesk'] tracking-tight uppercase text-[#e5e2e1] opacity-60 hover:text-[#ffb692] transition-all duration-200 active:scale-95 duration-100 flex items-center h-full" href="#">Garage</a>
+</div>
+<div class="flex gap-4 items-center">
+<button class="text-[#ff6d00] hover:text-[#ffb692] transition-all duration-200 active:scale-95 duration-100">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">notifications</span>
+</button>
+<button class="text-[#ff6d00] hover:text-[#ffb692] transition-all duration-200 active:scale-95 duration-100">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">bolt</span>
+</button>
+</div>
+</nav>
+<!-- Main Container -->
+<main class="flex-grow flex flex-col items-center justify-start p-4 md:p-8 gap-8 max-w-7xl mx-auto w-full">
+<!-- Telemetry HUD Bar (Asymmetric, breaking grid) -->
+<div class="w-full flex justify-between items-end mb-4 -ml-4 md:-ml-12 relative z-10">
+<!-- WPM / Main Metric -->
+<div class="bg-surface p-6 flex flex-col gap-1 border-l-4 border-primary shadow-[0_0_30px_rgba(255,109,0,0.08)] backdrop-blur-md bg-opacity-90">
+<span class="text-xs font-label tracking-widest text-primary uppercase">Current WPM</span>
+<span class="text-6xl font-headline font-bold text-on-surface tracking-tighter text-glow">124</span>
+</div>
+<!-- Secondary Stats -->
+<div class="flex gap-4">
+<div class="bg-surface-container-low px-4 py-3 flex flex-col items-end">
+<span class="text-[10px] font-label text-on-surface-variant uppercase tracking-widest">Time Left</span>
+<span class="text-xl font-headline font-medium text-primary">0:42</span>
+</div>
+<div class="bg-surface-container-low px-4 py-3 flex flex-col items-end">
+<span class="text-[10px] font-label text-on-surface-variant uppercase tracking-widest">Accuracy</span>
+<span class="text-xl font-headline font-medium text-on-surface">98.5%</span>
+</div>
+<div class="bg-surface-container-low px-4 py-3 flex flex-col items-end bg-gradient-to-br from-surface-container-low to-surface-container-highest">
+<span class="text-[10px] font-label text-primary uppercase tracking-widest">Streak</span>
+<span class="text-xl font-headline font-bold text-secondary">x24</span>
+</div>
+</div>
+</div>
+<!-- Task Prompt Canvas (Glassmorphism & Gradients) -->
+<div class="w-full bg-surface-container-high bg-opacity-60 backdrop-blur-xl p-8 md:p-16 flex flex-col items-center justify-center gap-8 relative overflow-hidden amber-glow">
+<!-- Decorative industrial accent -->
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-surface-container-highest via-primary to-surface-container-highest opacity-50"></div>
+<span class="text-sm font-label text-primary tracking-[0.3em] uppercase bg-surface-container-lowest px-4 py-1 border-l-2 border-primary">Active Objective</span>
+<div class="text-4xl md:text-6xl font-headline font-bold text-center tracking-tight leading-tight max-w-4xl"><span class="text-on-surface opacity-50">Select text and </span>
+<span class="text-on-surface text-glow uppercase tracking-wider">copy it</span>
+<span class="text-on-surface opacity-50">.</span></div>
+<!-- Terminal Input Mimic -->
+<div class="w-full max-w-2xl mt-4 relative">
+<div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+<span class="text-primary font-mono text-lg">&gt;</span>
+</div>
+<input aria-label="Input field reflecting required action" class="terminal-input w-full bg-surface-container-lowest text-on-surface font-body text-xl md:text-2xl py-4 pl-12 pr-4 border-none tracking-widest" placeholder="Type shortcut here..." readonly="" type="text" value=""/>
+<!-- Feedback Pulse Overlay (Correct state example) -->
+<div class="absolute inset-0 bg-primary-container opacity-10 pointer-events-none mix-blend-screen pulse-animation"></div>
+</div>
+</div>
+<!-- Real-time Race Track -->
+<div class="w-full flex flex-col gap-2 mt-8">
+<h2 class="text-sm font-label text-on-surface-variant uppercase tracking-widest mb-4">Live Telemetry</h2>
+<!-- Lane 1 (Player) -->
+<div class="relative w-full h-16 bg-surface-container-low flex items-center">
+<!-- Track Line -->
+<div class="absolute w-full h-[1px] bg-outline-variant opacity-20 top-1/2 -translate-y-1/2 z-0"></div>
+<!-- Player Avatar -->
+<div class="absolute left-[75%] z-10 flex items-center gap-3 -translate-x-1/2">
+<span class="text-xs font-label text-primary font-bold">YOU</span>
+<div class="w-10 h-10 rounded-DEFAULT bg-gradient-to-br from-primary-container to-primary flex items-center justify-center shadow-[0_0_15px_rgba(255,109,0,0.4)]">
+<img alt="Player Avatar" class="w-9 h-9 rounded-sm object-cover opacity-90" data-alt="close up headshot portrait of a serious gamer in dark lighting with orange neon rim light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBHQpId1l9uBrId2AAAt12JEG58HGzngZZBAgOkKjNRlWZtminssrvQMhZHOs6Be2v8XSqjXFrBSsM60dsDFnsTuYjG0VrMded_EMxQ_6rXlFgnEMFhDcA3u4DbEK5X0xSt890xlYoXDvXGtwWii0M1DnXNTw3khn7OsYBOwOjvf_iJjpTQ1wF0T5W8sH17J8x439cYkI44LXsNU88y1Xi9YonHhvGsx__v3SPBwMqX3ljA8tyUI9E73wlNsuU2eDBVISU5ykR8IGw"/>
+</div>
+</div>
+</div>
+<!-- Lane 2 (Opponent 1) -->
+<div class="relative w-full h-16 bg-surface-container-lowest flex items-center">
+<div class="absolute w-full h-[1px] bg-outline-variant opacity-20 top-1/2 -translate-y-1/2 z-0"></div>
+<!-- Opponent Avatar -->
+<div class="absolute left-[60%] z-10 flex items-center gap-3 -translate-x-1/2 opacity-70">
+<div class="w-10 h-10 rounded-DEFAULT bg-surface-container-high border-l-2 border-secondary flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">person</span>
+</div>
+<span class="text-xs font-label text-on-surface-variant font-bold">OPP_1</span>
+</div>
+</div>
+<!-- Lane 3 (Opponent 2) -->
+<div class="relative w-full h-16 bg-surface-container-low flex items-center">
+<div class="absolute w-full h-[1px] bg-outline-variant opacity-20 top-1/2 -translate-y-1/2 z-0"></div>
+<!-- Opponent Avatar -->
+<div class="absolute left-[40%] z-10 flex items-center gap-3 -translate-x-1/2 opacity-50">
+<div class="w-10 h-10 rounded-DEFAULT bg-surface-container-high border-l-2 border-outline flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant" style="font-variation-settings: 'FILL' 1;">person</span>
+</div>
+<span class="text-xs font-label text-on-surface-variant font-bold">OPP_2</span>
+</div>
+</div>
+</div>
+</main>
+</body></html>

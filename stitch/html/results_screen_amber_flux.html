@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Shortcut Showdown - Results</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-container": "#003457",
+                        "surface-container-highest": "#353534",
+                        "on-secondary": "#452b00",
+                        "outline": "#a98a7c",
+                        "on-tertiary-fixed-variant": "#004a78",
+                        "on-background": "#e5e2e1",
+                        "inverse-surface": "#e5e2e1",
+                        "surface-variant": "#353534",
+                        "secondary": "#ffcf8f",
+                        "surface-container-lowest": "#0e0e0e",
+                        "surface-container-high": "#2a2a2a",
+                        "on-secondary-fixed": "#291800",
+                        "outline-variant": "#594136",
+                        "background": "#131313",
+                        "on-primary": "#562000",
+                        "inverse-primary": "#9f4200",
+                        "on-surface-variant": "#e2bfb0",
+                        "tertiary-fixed": "#cfe5ff",
+                        "error-container": "#93000a",
+                        "tertiary-container": "#00a0fc",
+                        "primary-container": "#ff6d00",
+                        "on-secondary-container": "#684300",
+                        "surface-bright": "#3a3939",
+                        "surface-dim": "#131313",
+                        "on-error-container": "#ffdad6",
+                        "primary-fixed-dim": "#ffb692",
+                        "secondary-fixed-dim": "#ffb950",
+                        "primary-fixed": "#ffdbcb",
+                        "on-primary-fixed-variant": "#7a3000",
+                        "primary": "#ffb692",
+                        "on-primary-fixed": "#341100",
+                        "inverse-on-surface": "#313030",
+                        "on-surface": "#e5e2e1",
+                        "surface": "#131313",
+                        "on-tertiary-fixed": "#001d34",
+                        "secondary-fixed": "#ffddb3",
+                        "secondary-container": "#feaa00",
+                        "on-primary-container": "#582100",
+                        "surface-container": "#201f1f",
+                        "error": "#ffb4ab",
+                        "surface-tint": "#ffb692",
+                        "on-secondary-fixed-variant": "#624000",
+                        "surface-container-low": "#1c1b1b",
+                        "on-tertiary": "#003355",
+                        "tertiary": "#99cbff",
+                        "on-error": "#690005",
+                        "tertiary-fixed-dim": "#99cbff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Space Grotesk", "sans-serif"],
+                        "body": ["Space Grotesk", "sans-serif"],
+                        "label": ["Space Grotesk", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Space Grotesk', sans-serif; }
+        
+        .kinetic-gradient {
+            background: linear-gradient(135deg, rgba(255,109,0,0.8) 0%, rgba(255,182,146,0.8) 100%);
+        }
+        
+        .glass-panel {
+            background: rgba(42, 42, 42, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+        
+        .ambient-glow {
+            box-shadow: 0 0 30px rgba(255,182,146,0.08);
+        }
+        
+        .active-glow {
+            box-shadow: 0 4px 20px rgba(255,109,0,0.2);
+        }
+        
+        .ghost-border {
+            box-shadow: inset 0 0 0 1px rgba(89, 65, 54, 0.15);
+        }
+        
+        /* Hexagon Clip for Avatar */
+        .clip-hexagon {
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface min-h-screen flex flex-col md:flex-row overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
+<!-- JSON: SideNavBar (Only visible on md+, suppressed on transactional/results screen as per instructions "Task-Focused: Any sub-page featuring a 'Close' or 'Back' action that implies a temporary departure... hide the shell". However, "Results" might be a dead-end, but let's include it as hidden or adapt based on 'Session Telemetry' being a major screen. Wait, instructions say: "Automatic Suppression: You MUST exclude the navigation shell if the page intent is: Linear/Transactional: Login, Sign-up, Onboarding, Checkout, or 'Success/Confirmation' splash screens." Results = Success splash. Thus, SUPPRESS NAV. ) -->
+<!-- Main Content Canvas -->
+<main class="flex-1 w-full h-screen overflow-y-auto relative z-10 p-6 md:p-12 flex flex-col justify-center items-center">
+<!-- Background Particle Effects (Simulated with CSS/Divs) -->
+<div class="fixed inset-0 pointer-events-none overflow-hidden z-0 flex justify-center items-center">
+<div class="absolute w-96 h-96 bg-primary-container rounded-full blur-[150px] opacity-20 top-1/4 left-1/4 mix-blend-screen"></div>
+<div class="absolute w-64 h-64 bg-primary rounded-full blur-[100px] opacity-10 bottom-1/4 right-1/4 mix-blend-screen"></div>
+<!-- Floating "Sparks" -->
+<div class="absolute w-1 h-8 bg-primary top-10 left-1/3 rotate-45 opacity-50 shadow-[0_0_10px_#ffb692]"></div>
+<div class="absolute w-2 h-2 bg-primary-container top-1/2 left-1/4 rotate-12 opacity-80 shadow-[0_0_15px_#ff6d00]"></div>
+<div class="absolute w-1 h-12 bg-primary bottom-20 right-1/3 -rotate-12 opacity-40 shadow-[0_0_8px_#ffb692]"></div>
+<div class="absolute w-3 h-3 bg-secondary top-1/4 right-1/4 rotate-45 opacity-60 shadow-[0_0_12px_#feaa00]"></div>
+</div>
+<!-- Header -->
+<header class="text-center mb-12 z-10 relative">
+<h1 class="text-5xl md:text-7xl font-bold font-headline tracking-tighter text-transparent bg-clip-text kinetic-gradient uppercase mb-2 filter drop-shadow-[0_0_15px_rgba(255,109,0,0.5)]">RACE COMPLETE</h1>
+<p class="text-primary font-medium tracking-widest uppercase text-sm md:text-base">Session Telemetry Initialized</p>
+</header>
+<div class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 z-10 relative">
+<!-- PODIUM (Asymmetric Left Side) -->
+<section class="lg:col-span-7 flex flex-col justify-end items-center relative h-full min-h-[400px]">
+<div class="flex items-end justify-center gap-2 md:gap-4 w-full px-4 mb-8">
+<!-- 2nd Place -->
+<div class="flex flex-col items-center group relative z-10">
+<div class="absolute -top-16 opacity-0 group-hover:opacity-100 transition-opacity bg-surface-container-highest px-3 py-1 rounded text-xs font-bold text-on-surface">SILVER</div>
+<div class="w-16 h-16 md:w-20 md:h-20 clip-hexagon bg-surface-container-high mb-4 flex items-center justify-center ghost-border p-1">
+<img alt="2nd Place Avatar" class="w-full h-full object-cover clip-hexagon" data-alt="Portrait of a young male gamer with headset, neon blue lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAj9NnPyQKePG5AH4Y3XQfGZOypfmM-ydLxq1j8ohetcEgZ0n3785IpKJzVdYcKDHDeIideQqrz_l_J-IipzGNEO2pU-0xXOZYjxmbmw-6D6lEgfj54JG-ftSNOtODqM9TA7rczHpKVwdRKxLq6BYJ_54EOGXuOQiqWd0H7I4lkpvDaLloaMFHjwVq4jnZpHCCuFr0KEBfusg8rERuo64y1z3duytaFuOY4gkdC_iGZ991asIcyZYb0Uprawh5_dkUNlwYx4UiiLCE"/>
+</div>
+<div class="text-center mb-2">
+<p class="font-bold text-on-surface text-sm">NEO_BYTE</p>
+<p class="text-xs text-primary font-medium">98 WPM</p>
+</div>
+<div class="w-20 md:w-28 h-32 md:h-40 bg-surface-container-low ghost-border relative overflow-hidden flex items-end justify-center">
+<div class="absolute inset-x-0 bottom-0 h-1 bg-surface-variant"></div>
+<span class="font-black text-4xl text-surface-variant mb-4">2</span>
+</div>
+</div>
+<!-- 1st Place (Center, Elevated) -->
+<div class="flex flex-col items-center relative z-20 -translate-y-8">
+<div class="absolute -top-20 bg-primary-container/20 px-4 py-1 rounded text-sm font-black text-primary border-b border-primary/50 shadow-[0_4px_15px_rgba(255,109,0,0.3)]">VICTOR</div>
+<div class="w-20 h-20 md:w-28 md:h-28 clip-hexagon bg-primary-container mb-4 flex items-center justify-center p-1 shadow-[0_0_25px_rgba(255,109,0,0.4)]">
+<img alt="1st Place Avatar" class="w-full h-full object-cover clip-hexagon" data-alt="Portrait of a focused male gamer in dark hoodie, amber rim lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBpgiA4reEYhdCtKt_oHcMuTckkD4GbuuMN51oTVIIWMhlnvFSOdCKiG3KKKpEhUhm9G5Qyn6cRYs-U0UP-X0CsKYq3wAPb9gou2FkFQcozTaWZSmwxWq7QrlTYzp8baiusnBdlrm_L9DaPAMU1sJtD_Vpu2j-hp9-g0sWQ9eCx_LiNDPgE3neUoy5tp7gdKGNEqpiYzSjXp1wfMKlyd3Y4VKsiy2V95bId0Ttn3pq560spyhUK44pgxYZCTVbkypfbjlB7mYxLumI"/>
+</div>
+<div class="text-center mb-4">
+<p class="font-black text-primary text-base md:text-lg tracking-tight">OPERATOR_01</p>
+<p class="text-sm text-primary-fixed-dim font-bold">112 WPM</p>
+</div>
+<div class="w-24 md:w-32 h-40 md:h-52 bg-surface-container-highest ghost-border relative overflow-hidden flex flex-col items-center justify-end active-glow">
+<!-- Amber Glow Core inside podium -->
+<div class="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-primary-container/20 to-transparent"></div>
+<div class="absolute inset-x-0 bottom-0 h-1 bg-primary"></div>
+<span class="font-black text-6xl text-primary mb-6 drop-shadow-[0_0_10px_rgba(255,109,0,0.5)]">1</span>
+</div>
+</div>
+<!-- 3rd Place -->
+<div class="flex flex-col items-center group relative z-10">
+<div class="absolute -top-16 opacity-0 group-hover:opacity-100 transition-opacity bg-surface-container-highest px-3 py-1 rounded text-xs font-bold text-on-surface">BRONZE</div>
+<div class="w-16 h-16 md:w-20 md:h-20 clip-hexagon bg-surface-container-high mb-4 flex items-center justify-center ghost-border p-1">
+<img alt="3rd Place Avatar" class="w-full h-full object-cover clip-hexagon" data-alt="Portrait of a female programmer with glasses, soft warm monitor glow" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCN7HQaIE_ApJrCz9G4RfjXPF0IEJDbM5Rbhx0Le-J13NlZpQt6ve2fXdIw7v4jFqXmlRQlZxUH12ptJbhiot191BJBb6PbF7rbQAr84oRH59DriGBhEdjk4SpD9FEPQNTBZ-Uc_CK9EVeGrIoG7HvgNTB-EP3w5Eq4L4MHCdbnwZTW2KF6B3IuocKEKYgBI8B1t8fnOfxbmDPZ_X9KYqnYfkQiTOVcy5r0ofR72o97oixoq_2S5iKykyORU1JXrGrO_dBcgPYvyyg"/>
+</div>
+<div class="text-center mb-2">
+<p class="font-bold text-on-surface text-sm">SYNTAX_ERR</p>
+<p class="text-xs text-primary font-medium">92 WPM</p>
+</div>
+<div class="w-20 md:w-28 h-24 md:h-32 bg-surface-container-lowest ghost-border relative overflow-hidden flex items-end justify-center">
+<div class="absolute inset-x-0 bottom-0 h-1 bg-surface-container"></div>
+<span class="font-black text-4xl text-surface-container mb-4">3</span>
+</div>
+</div>
+</div>
+</section>
+<!-- TELEMETRY & ACTIONS (Right Side) -->
+<section class="lg:col-span-5 flex flex-col gap-6">
+<!-- Telemetry Card (Glassmorphism) -->
+<div class="glass-panel p-6 relative overflow-hidden ambient-glow border-l-[3px] border-primary group">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full pointer-events-none"></div>
+<h2 class="text-lg font-bold text-on-surface mb-6 uppercase flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">speed</span>
+                        Session Telemetry
+                    </h2>
+<!-- Main Stats Grid -->
+<div class="grid grid-cols-2 gap-4 mb-6">
+<!-- Accuracy Ring -->
+<div class="col-span-2 bg-surface-container-lowest p-4 flex items-center justify-between ghost-border relative">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div>
+<p class="text-xs text-on-surface-variant font-label uppercase tracking-widest mb-1">Accuracy</p>
+<p class="text-sm text-on-surface">Target vs Actual</p>
+</div>
+<div class="relative w-20 h-20 flex items-center justify-center">
+<!-- Simulated SVG Circle Progress -->
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 100 100">
+<circle cx="50" cy="50" fill="none" r="40" stroke="rgba(42,42,42,1)" stroke-width="8"></circle>
+<circle class="drop-shadow-[0_0_5px_rgba(255,109,0,0.8)]" cx="50" cy="50" fill="none" r="40" stroke="#ff6d00" stroke-dasharray="251.2" stroke-dashoffset="15" stroke-width="8"></circle>
+</svg>
+<div class="absolute inset-0 flex items-center justify-center flex-col">
+<span class="font-black text-xl text-primary">94%</span>
+</div>
+</div>
+</div>
+<!-- Reaction Time -->
+<div class="bg-surface-container-lowest p-4 ghost-border flex flex-col justify-center">
+<p class="text-xs text-on-surface-variant font-label uppercase tracking-widest mb-2">Avg Reaction</p>
+<div class="flex items-baseline gap-1">
+<span class="font-bold text-2xl text-on-surface tracking-tight">214</span>
+<span class="text-xs text-primary">ms</span>
+</div>
+</div>
+<!-- Mistake Ratio -->
+<div class="bg-surface-container-lowest p-4 ghost-border flex flex-col justify-center">
+<p class="text-xs text-on-surface-variant font-label uppercase tracking-widest mb-2">Error Rate</p>
+<div class="flex items-center gap-4">
+<div>
+<p class="text-xs text-primary">Correct</p>
+<span class="font-bold text-xl text-on-surface">342</span>
+</div>
+<div class="w-px h-6 bg-surface-variant"></div>
+<div>
+<p class="text-xs text-error">Miss</p>
+<span class="font-bold text-xl text-error-container">12</span>
+</div>
+</div>
+</div>
+</div>
+<!-- XP Bar -->
+<div class="mt-4">
+<div class="flex justify-between items-end mb-2">
+<p class="text-xs text-on-surface-variant font-label uppercase tracking-widest">XP Gained</p>
+<p class="text-sm font-bold text-secondary">+450 XP</p>
+</div>
+<div class="h-2 w-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full bg-secondary w-[75%] shadow-[0_0_10px_rgba(254,170,0,0.5)]"></div>
+</div>
+</div>
+</div>
+<!-- Action Buttons Area -->
+<div class="flex flex-col gap-3 mt-4">
+<!-- Primary CTA -->
+<button class="w-full kinetic-gradient rounded-[4px] py-4 px-6 text-on-primary-container font-bold uppercase tracking-widest flex items-center justify-center gap-3 hover:shadow-[inset_0_0_20px_rgba(255,182,146,0.5),0_0_25px_rgba(255,109,0,0.4)] transition-all active:scale-[0.98]">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">replay</span>
+                        Rematch
+                    </button>
+<div class="flex gap-3">
+<!-- Secondary CTA -->
+<button class="flex-1 bg-transparent ghost-border rounded-[4px] py-3 px-4 text-on-surface font-medium uppercase text-sm tracking-wider hover:bg-surface-container-highest transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">group_add</span>
+                            New Lobby
+                        </button>
+<!-- Tertiary/Home -->
+<button class="w-14 bg-surface-container-low ghost-border rounded-[4px] flex items-center justify-center text-primary hover:bg-surface-container-high transition-colors hover:text-primary-fixed">
+<span class="material-symbols-outlined">home</span>
+</button>
+</div>
+</div>
+</section>
+</div>
+</main>
+</body></html>
