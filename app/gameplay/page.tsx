@@ -1,7 +1,13 @@
 "use client";
 
 import { IconBell, IconBolt, IconUser } from "@tabler/icons-react";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 
 type Objective = {
   command: string;
@@ -68,7 +74,9 @@ export default function GameplayPage() {
   const startedAt = useRef<number>(0);
 
   const [entry, setEntry] = useState("");
-  const [feedback, setFeedback] = useState<"idle" | "success" | "error">("idle");
+  const [feedback, setFeedback] = useState<"idle" | "success" | "error">(
+    "idle",
+  );
   const [game, setGame] = useState<GameState>({
     timeLeft: ROUND_SECONDS,
     objectiveIndex: 0,
@@ -122,8 +130,11 @@ export default function GameplayPage() {
         };
 
         const winner = getWinner(nextRace);
-        const elapsedMinutes = Math.max((Date.now() - startedAt.current) / 60000, 1 / 60);
-        const calculatedWpm = (previous.typedChars / 5) / elapsedMinutes;
+        const elapsedMinutes = Math.max(
+          (Date.now() - startedAt.current) / 60000,
+          1 / 60,
+        );
+        const calculatedWpm = previous.typedChars / 5 / elapsedMinutes;
         const successRate =
           previous.attempts > 0
             ? ((previous.attempts - previous.errors) / previous.attempts) * 100
@@ -172,14 +183,22 @@ export default function GameplayPage() {
 
       const nextRace = {
         ...previous.race,
-        you: clamp(previous.race.you + (success ? 3.8 + Math.random() * 1.9 : -0.8), 0, 100),
+        you: clamp(
+          previous.race.you + (success ? 3.8 + Math.random() * 1.9 : -0.8),
+          0,
+          100,
+        ),
       };
 
       const nextAttempts = previous.attempts + 1;
       const nextErrors = previous.errors + (success ? 0 : 1);
-      const nextTypedChars = previous.typedChars + (success ? shortcutLength + 1 : 0);
-      const elapsedMinutes = Math.max((Date.now() - startedAt.current) / 60000, 1 / 60);
-      const calculatedWpm = (nextTypedChars / 5) / elapsedMinutes;
+      const nextTypedChars =
+        previous.typedChars + (success ? shortcutLength + 1 : 0);
+      const elapsedMinutes = Math.max(
+        (Date.now() - startedAt.current) / 60000,
+        1 / 60,
+      );
+      const calculatedWpm = nextTypedChars / 5 / elapsedMinutes;
       const successRate = ((nextAttempts - nextErrors) / nextAttempts) * 100;
       const winner = getWinner(nextRace);
 
@@ -189,7 +208,9 @@ export default function GameplayPage() {
         attempts: nextAttempts,
         errors: nextErrors,
         typedChars: nextTypedChars,
-        objectiveIndex: success ? previous.objectiveIndex + 1 : previous.objectiveIndex,
+        objectiveIndex: success
+          ? previous.objectiveIndex + 1
+          : previous.objectiveIndex,
         streak: success ? previous.streak + 1 : 0,
         wpm: Math.round(clamp(calculatedWpm, 24, 220)),
         accuracy: clamp(successRate, 0, 100),
@@ -239,7 +260,8 @@ export default function GameplayPage() {
         ? "bg-[#20110a] shadow-[inset_0_0_0_1px_#ff6d00,inset_2px_0_0_0_#ff6d00]"
         : "bg-[#0e0e0e]";
 
-  const overlayColorClass = feedback === "error" ? "bg-[#93000a]" : "bg-[#ff6d00]";
+  const overlayColorClass =
+    feedback === "error" ? "bg-[#93000a]" : "bg-[#ff6d00]";
   const outcomeLabel =
     game.winner !== null
       ? `Winner: ${game.winner}`
@@ -249,7 +271,10 @@ export default function GameplayPage() {
 
   return (
     <div className="relative min-h-svh bg-[#0e0e0e] text-[#e5e2e1] selection:bg-[#ff6d00] selection:text-[#341100]">
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid-home opacity-60" />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-grid-home opacity-60"
+      />
 
       <nav className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-[#201f1f] bg-[#131313]/95 px-4 shadow-[0_4px_20px_rgba(255,109,0,0.05)] backdrop-blur md:px-8">
         <div className="text-lg font-black tracking-tight text-[#ff6d00] uppercase italic md:text-xl">
@@ -263,10 +288,16 @@ export default function GameplayPage() {
           >
             Race
           </a>
-          <a className="flex h-full items-center text-sm tracking-wide text-[#e5e2e1]/60 uppercase" href="#">
+          <a
+            className="flex h-full items-center text-sm tracking-wide text-[#e5e2e1]/60 uppercase"
+            href="#"
+          >
             Leaderboard
           </a>
-          <a className="flex h-full items-center text-sm tracking-wide text-[#e5e2e1]/60 uppercase" href="#">
+          <a
+            className="flex h-full items-center text-sm tracking-wide text-[#e5e2e1]/60 uppercase"
+            href="#"
+          >
             Garage
           </a>
         </div>
@@ -292,7 +323,9 @@ export default function GameplayPage() {
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-5 md:px-8 md:py-8">
         <section className="flex w-full items-end justify-between gap-4 md:-ml-8">
           <div className="border-l-4 border-[#ffb692] bg-[#131313]/95 p-5 shadow-[0_0_30px_rgba(255,109,0,0.08)] md:p-6">
-            <div className="text-xs tracking-[0.18em] text-[#ffb692] uppercase">Current WPM</div>
+            <div className="text-xs tracking-[0.18em] text-[#ffb692] uppercase">
+              Current WPM
+            </div>
             <div className="text-5xl font-bold tracking-tighter text-[#e5e2e1] drop-shadow-[0_0_10px_rgba(255,109,0,0.45)] md:text-6xl">
               {game.wpm}
             </div>
@@ -300,16 +333,28 @@ export default function GameplayPage() {
 
           <div className="grid grid-cols-3 gap-2 md:gap-4">
             <div className="bg-[#1c1b1b] px-3 py-2 text-right md:px-4 md:py-3">
-              <div className="text-[10px] tracking-[0.16em] text-[#a98a7c] uppercase">Time Left</div>
-              <div className="text-lg text-[#ffb692] md:text-xl">{formatTime(game.timeLeft)}</div>
+              <div className="text-[10px] tracking-[0.16em] text-[#a98a7c] uppercase">
+                Time Left
+              </div>
+              <div className="text-lg text-[#ffb692] md:text-xl">
+                {formatTime(game.timeLeft)}
+              </div>
             </div>
             <div className="bg-[#1c1b1b] px-3 py-2 text-right md:px-4 md:py-3">
-              <div className="text-[10px] tracking-[0.16em] text-[#a98a7c] uppercase">Accuracy</div>
-              <div className="text-lg text-[#e5e2e1] md:text-xl">{game.accuracy.toFixed(1)}%</div>
+              <div className="text-[10px] tracking-[0.16em] text-[#a98a7c] uppercase">
+                Accuracy
+              </div>
+              <div className="text-lg text-[#e5e2e1] md:text-xl">
+                {game.accuracy.toFixed(1)}%
+              </div>
             </div>
             <div className="bg-linear-to-br from-[#1c1b1b] to-[#353534] px-3 py-2 text-right md:px-4 md:py-3">
-              <div className="text-[10px] tracking-[0.16em] text-[#ffb692] uppercase">Streak</div>
-              <div className="text-lg font-bold text-[#ffcf8f] md:text-xl">x{game.streak}</div>
+              <div className="text-[10px] tracking-[0.16em] text-[#ffb692] uppercase">
+                Streak
+              </div>
+              <div className="text-lg font-bold text-[#ffcf8f] md:text-xl">
+                x{game.streak}
+              </div>
             </div>
           </div>
         </section>
@@ -340,7 +385,11 @@ export default function GameplayPage() {
                 autoComplete="off"
                 className={`w-full border-none py-4 pr-4 pl-12 text-xl tracking-[0.12em] text-[#e5e2e1] outline-none transition-all md:text-2xl ${inputVisualClass}`}
                 disabled={game.finished}
-                placeholder={game.finished ? "Round complete" : "Press Ctrl/Cmd + key or type shortcut and press Enter"}
+                placeholder={
+                  game.finished
+                    ? "Round complete"
+                    : "Press Ctrl/Cmd + key or type shortcut and press Enter"
+                }
                 spellCheck={false}
                 value={entry}
                 onChange={(event) => setEntry(event.target.value)}
@@ -351,12 +400,16 @@ export default function GameplayPage() {
               />
             </div>
 
-            <p className="text-xs tracking-[0.2em] text-[#a98a7c] uppercase md:text-sm">{outcomeLabel}</p>
+            <p className="text-xs tracking-[0.2em] text-[#a98a7c] uppercase md:text-sm">
+              {outcomeLabel}
+            </p>
           </div>
         </section>
 
         <section className="mt-1 flex w-full flex-col gap-3 md:mt-4">
-          <h2 className="mb-2 text-sm tracking-[0.16em] text-[#a98a7c] uppercase">Live Telemetry</h2>
+          <h2 className="mb-2 text-sm tracking-[0.16em] text-[#a98a7c] uppercase">
+            Live Telemetry
+          </h2>
 
           <div className="relative h-16 bg-[#1c1b1b]">
             <div className="absolute top-1/2 h-px w-full -translate-y-1/2 bg-[#594136] opacity-30" />

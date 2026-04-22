@@ -207,7 +207,9 @@ export default function LobbyPage() {
           </div>
 
           <div className="flex flex-col gap-6 lg:col-span-8">
-            <div className={cn("flex flex-1 flex-col overflow-hidden", shell.card)}>
+            <div
+              className={cn("flex flex-1 flex-col overflow-hidden", shell.card)}
+            >
               <div className="flex items-center justify-between gap-4 border-b border-white/6 bg-[#0f0f0f]/80 px-5 py-4 md:px-6">
                 <h2
                   className={cn(
@@ -252,7 +254,12 @@ export default function LobbyPage() {
                       <h3 className="truncate text-base font-bold uppercase leading-tight tracking-tight text-white md:text-lg">
                         USER_X01 (YOU)
                       </h3>
-                      <span className={cn("font-mono text-[11px] tracking-wide", shell.muted)}>
+                      <span
+                        className={cn(
+                          "font-mono text-[11px] tracking-wide",
+                          shell.muted,
+                        )}
+                      >
                         LATENCY: 12ms
                       </span>
                     </div>
@@ -264,7 +271,11 @@ export default function LobbyPage() {
                       "shadow-[0_0_20px_rgba(255,140,0,0.35)]",
                     )}
                   >
-                    <IconCheck className="size-4 shrink-0" stroke={2.5} aria-hidden />
+                    <IconCheck
+                      className="size-4 shrink-0"
+                      stroke={2.5}
+                      aria-hidden
+                    />
                     <span className="text-[10px] font-bold tracking-[0.2em] uppercase">
                       READY
                     </span>
@@ -393,7 +404,9 @@ function PlayerRow({
           <h3 className="truncate text-base font-bold uppercase leading-tight tracking-tight text-white md:text-lg">
             {name}
           </h3>
-          <span className={cn("font-mono text-[11px] tracking-wide", shell.muted)}>
+          <span
+            className={cn("font-mono text-[11px] tracking-wide", shell.muted)}
+          >
             LATENCY: {latency}
           </span>
         </div>

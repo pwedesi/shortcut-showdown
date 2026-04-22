@@ -16,7 +16,13 @@ type PodiumEntry = {
 
 const podium: PodiumEntry[] = [
   { place: 2, name: "NEO_BYTE", wpm: 98, initials: "NB" },
-  { place: 1, name: "OPERATOR_01", wpm: 112, initials: "OP", highlighted: true },
+  {
+    place: 1,
+    name: "OPERATOR_01",
+    wpm: 112,
+    initials: "OP",
+    highlighted: true,
+  },
   { place: 3, name: "SYNTAX_ERR", wpm: 92, initials: "SE" },
 ];
 
@@ -28,7 +34,10 @@ const accuracyOffset = accuracyCircumference * (1 - accuracy / 100);
 export default function ResultsPage() {
   return (
     <div className="relative min-h-svh overflow-hidden bg-[#090909] text-[#e5e2e1] selection:bg-[#ff6d00] selection:text-[#341100]">
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid-home opacity-35" />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-grid-home opacity-35"
+      />
 
       <div
         aria-hidden
@@ -93,7 +102,9 @@ export default function ResultsPage() {
                     >
                       {entry.name}
                     </p>
-                    <p className="text-xs font-semibold text-[#ffb692]">{entry.wpm} WPM</p>
+                    <p className="text-xs font-semibold text-[#ffb692]">
+                      {entry.wpm} WPM
+                    </p>
                   </div>
 
                   <div
@@ -130,13 +141,26 @@ export default function ResultsPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-4 border border-[#2a2a2a] bg-[#090909] p-4">
                 <div>
-                  <p className="text-[11px] tracking-[0.2em] text-[#a8a2a0] uppercase">Accuracy</p>
+                  <p className="text-[11px] tracking-[0.2em] text-[#a8a2a0] uppercase">
+                    Accuracy
+                  </p>
                   <p className="text-sm text-[#d0cdcb]">Target vs Actual</p>
                 </div>
 
                 <div className="relative size-20 shrink-0">
-                  <svg className="size-full -rotate-90" viewBox="0 0 100 100" aria-hidden>
-                    <circle cx="50" cy="50" r={accuracyRadius} fill="none" stroke="rgba(56,56,56,1)" strokeWidth="8" />
+                  <svg
+                    className="size-full -rotate-90"
+                    viewBox="0 0 100 100"
+                    aria-hidden
+                  >
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r={accuracyRadius}
+                      fill="none"
+                      stroke="rgba(56,56,56,1)"
+                      strokeWidth="8"
+                    />
                     <circle
                       cx="50"
                       cy="50"
@@ -158,7 +182,9 @@ export default function ResultsPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="border border-[#2a2a2a] bg-[#090909] p-4">
-                  <p className="text-[11px] tracking-[0.2em] text-[#a8a2a0] uppercase">Avg Reaction</p>
+                  <p className="text-[11px] tracking-[0.2em] text-[#a8a2a0] uppercase">
+                    Avg Reaction
+                  </p>
                   <p className="mt-2 text-4xl leading-none font-bold tracking-tight text-[#ece9e7]">
                     214
                     <span className="ml-1 text-xs text-[#ffb692]">ms</span>
@@ -166,16 +192,22 @@ export default function ResultsPage() {
                 </div>
 
                 <div className="border border-[#2a2a2a] bg-[#090909] p-4">
-                  <p className="text-[11px] tracking-[0.2em] text-[#a8a2a0] uppercase">Error Rate</p>
+                  <p className="text-[11px] tracking-[0.2em] text-[#a8a2a0] uppercase">
+                    Error Rate
+                  </p>
                   <div className="mt-2 flex items-end gap-4">
                     <div>
                       <p className="text-xs text-[#d0cdcb]">Correct</p>
-                      <p className="text-3xl leading-none font-bold text-[#ece9e7]">342</p>
+                      <p className="text-3xl leading-none font-bold text-[#ece9e7]">
+                        342
+                      </p>
                     </div>
                     <div className="h-8 w-px bg-[#2f2f2f]" />
                     <div>
                       <p className="text-xs text-[#ff9d90]">Miss</p>
-                      <p className="text-3xl leading-none font-bold text-[#d44f43]">12</p>
+                      <p className="text-3xl leading-none font-bold text-[#d44f43]">
+                        12
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -183,7 +215,9 @@ export default function ResultsPage() {
 
               <div className="pt-1">
                 <div className="mb-1 flex items-end justify-between">
-                  <p className="text-[11px] tracking-[0.2em] text-[#a8a2a0] uppercase">XP Gained</p>
+                  <p className="text-[11px] tracking-[0.2em] text-[#a8a2a0] uppercase">
+                    XP Gained
+                  </p>
                   <p className="text-sm font-bold text-[#ffd08d]">+450 XP</p>
                 </div>
                 <div className="h-3 overflow-hidden border border-[#2a2a2a] bg-[#090909]">
