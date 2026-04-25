@@ -3,6 +3,7 @@
  */
 
 const DEFAULT_API = "http://localhost:8000";
+const DEFAULT_APP_DISPLAY_VERSION = "v 1.0.0";
 
 function trimSlash(s: string): string {
   return s.replace(/\/+$/, "");
@@ -12,6 +13,12 @@ function trimSlash(s: string): string {
 export function getApiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   return trimSlash(raw || DEFAULT_API);
+}
+
+/** UI version label from `.env` (`NEXT_PUBLIC_APP_VERSION`). */
+export function getAppDisplayVersion(): string {
+  const raw = process.env.NEXT_PUBLIC_APP_VERSION?.trim();
+  return raw || DEFAULT_APP_DISPLAY_VERSION;
 }
 
 /**

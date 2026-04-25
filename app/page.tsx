@@ -14,6 +14,7 @@ import {
   loadCallsignFromStorage,
   saveCallsignToStorage,
 } from "@/lib/callsign";
+import { getAppDisplayVersion } from "@/lib/config";
 import { buildLobbyPath, parseJoinLobbyInput } from "@/lib/lobbyQuery";
 import { usePlayerConnection } from "@/lib/realtime/playerConnection";
 
@@ -104,6 +105,7 @@ export default function Home() {
   }, [router, callsign]);
 
   const conn = connectionLabel(status);
+  const appVersion = getAppDisplayVersion();
 
   return (
     <div className="relative isolate flex min-h-svh w-full flex-col bg-[#0a0a0a] text-foreground">
@@ -245,7 +247,7 @@ export default function Home() {
 
           <div className="mt-6 flex flex-col gap-2 border-t border-[color-mix(in_srgb,#594136_14%,transparent)] pt-4 text-xs font-medium tracking-[0.18em] text-[#e2bfb0]/60 uppercase">
             <div className="flex items-center justify-between">
-              <span>V 2.4.1</span>
+              <span>{appVersion}</span>
               <span
                 className={
                   conn.ok
