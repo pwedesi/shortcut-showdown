@@ -90,5 +90,16 @@ export function normalizeLobbyFromApi(data: unknown): Lobby {
   ) {
     out.max_attempts_per_second = max_attempts_per_second;
   }
+  for (const key of [
+    "game_room_id",
+    "active_game_room_id",
+    "room_id",
+  ] as const) {
+    const v = o[key];
+    if (typeof v === "string" && v.trim()) {
+      out.game_room_id = v.trim();
+      break;
+    }
+  }
   return out;
 }

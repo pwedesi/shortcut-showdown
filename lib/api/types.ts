@@ -59,6 +59,11 @@ export type Lobby = {
   challenge_count?: number;
   round_duration_seconds?: number;
   max_attempts_per_second?: number;
+  /**
+   * Set once a match is created from this lobby; non-leader clients use this
+   * (with GET /lobbies polling) to follow the host into `/gameplay`.
+   */
+  game_room_id?: string;
 };
 
 /** Public challenge (no answer keys) — see backend GameStateView. */

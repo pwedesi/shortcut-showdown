@@ -182,4 +182,24 @@ describe("GameplayClient", () => {
       );
     });
   });
+
+  it("blocks browser shortcuts on window keydown", async () => {
+    render(
+      <PlayerConnectionProvider>
+        <GameplayClient />
+      </PlayerConnectionProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Type the shortcut/i)).toBeInTheDocument();
+    });
+    const event = new KeyboardEvent("keydown", {
+      key: "n",
+      ctrlKey: true,
+      cancelable: true,
+      bubbles: true,
+    });
+    const dispatched = window.dispatchEvent(event);
+    expect(dispatched).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
+  });
 });

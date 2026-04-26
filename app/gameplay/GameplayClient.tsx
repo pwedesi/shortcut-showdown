@@ -24,6 +24,20 @@ function formatTime(seconds: number): string {
   return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
+function trapsBrowserShortcut(event: {
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+  key: string;
+}): boolean {
+  return (
+    event.ctrlKey ||
+    event.metaKey ||
+    event.altKey ||
+    /^f\d{1,2}$/i.test(event.key)
+  );
+}
+
 export function GameplayClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -101,6 +115,22 @@ export function GameplayClient() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!playerId || !session.gameState || session.gameState.finished) {
+      return;
+    }
+    const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (!trapsBrowserShortcut(event)) {
+        return;
+      }
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onWindowKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onWindowKeyDown, true);
+    };
+  }, [playerId, session.gameState, session.gameState?.finished]);
+
   function setTransientFeedback(nextFeedback: "success" | "error") {
     setFeedback(nextFeedback);
     if (resetFeedbackTimer.current) {
@@ -128,6 +158,10 @@ export function GameplayClient() {
         setTransientFeedback("error");
       }
       return;
+    }
+    if (trapsBrowserShortcut(event)) {
+      event.preventDefault();
+      event.stopPropagation();
     }
     const r = await session.trySubmitKeys(event);
     if (r) {

@@ -68,6 +68,7 @@ describe("Lobby page", () => {
     push.mockReset();
     replace.mockReset();
     searchParams = new URLSearchParams();
+    MockWebSocket.instances = [];
     globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
   });
 
@@ -261,6 +262,130 @@ describe("Lobby page", () => {
     expect(
       await screen.findByText(/Only the room leader can start/i),
     ).toBeInTheDocument();
+  });
+
+  it("navigates a non-leader to gameplay when GET lobby returns game_room_id", async () => {
+    searchParams = new URLSearchParams(`id=${LOBBY_ID}`);
+    let getCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo) => {
+        const u = String(input);
+        if (
+          u.startsWith("http://test.local/lobbies/") &&
+          u.includes(LOBBY_ID) &&
+          !u.match(/join|leave|start/)
+        ) {
+          getCalls += 1;
+          if (getCalls === 1) {
+            return fetchLobbySuccess({
+              id: LOBBY_ID,
+              status: "waiting",
+              players: [
+                { player_id: "p-host", is_leader: true },
+                { player_id: playerWsId, is_leader: false },
+              ],
+            });
+          }
+          return fetchLobbySuccess({
+            id: LOBBY_ID,
+            status: "in_game",
+            game_room_id: "room-from-poll",
+            players: [
+              { player_id: "p-host", is_leader: true },
+              { player_id: playerWsId, is_leader: false },
+            ],
+          });
+        }
+        return new Response("bad", { status: 500 });
+      }),
+    );
+    render(
+      <PlayerConnectionProvider>
+        <LobbyPage />
+      </PlayerConnectionProvider>,
+    );
+    await waitFor(
+      () => {
+        expect(screen.getByText(/2\/8 CONNECTED/)).toBeInTheDocument();
+      },
+      { timeout: 5_000 },
+    );
+    await act(async () => {
+      await new Promise<void>((r) => setTimeout(r, 3_200));
+    });
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith(
+        expect.stringMatching(/room=room-from-poll/),
+      );
+    });
+  });
+
+  it("navigates a non-leader to gameplay on room_snapshot WebSocket event", async () => {
+    searchParams = new URLSearchParams(`id=${LOBBY_ID}`);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo) => {
+        const u = String(input);
+        if (
+          u.startsWith("http://test.local/lobbies/") &&
+          u.includes(LOBBY_ID) &&
+          !u.match(/join|leave|start/)
+        ) {
+          return fetchLobbySuccess({
+            id: LOBBY_ID,
+            status: "waiting",
+            players: [
+              { player_id: "p-host", is_leader: true },
+              { player_id: playerWsId, is_leader: false },
+            ],
+          });
+        }
+        return new Response("bad", { status: 500 });
+      }),
+    );
+    render(
+      <PlayerConnectionProvider>
+        <LobbyPage />
+      </PlayerConnectionProvider>,
+    );
+    await waitFor(
+      () => {
+        expect(screen.getByText(/2\/8 CONNECTED/)).toBeInTheDocument();
+      },
+      { timeout: 5_000 },
+    );
+    const ws = MockWebSocket.instances.at(-1)!;
+    const gs = {
+      status: "running",
+      state_version: 1,
+      server_time: 0,
+      round_started_at: 0,
+      round_ends_at: 1,
+      objective_count: 0,
+      challenges: [],
+      players: {},
+      finished: false,
+      winner_player_id: null,
+      draw: false,
+      end_reason: null,
+      finished_at: null,
+    };
+    await act(async () => {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          v: 1,
+          type: "room_snapshot",
+          room_id: "room-ws-1",
+          game_state: gs,
+        }),
+      });
+    });
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith(
+        expect.stringMatching(/room=room-ws-1/),
+      );
+    });
   });
 
   it("navigates to gameplay when start returns game room id", async () => {

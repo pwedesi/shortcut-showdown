@@ -118,6 +118,26 @@ describe("lobbyPlayers", () => {
     });
   });
 
+  it("normalizeLobbyFromApi maps game room id aliases to game_room_id", () => {
+    expect(
+      normalizeLobbyFromApi({
+        id: "lob-1",
+        players: ["a"],
+        status: "in_game",
+        active_game_room_id: "r2",
+      }),
+    ).toMatchObject({ id: "lob-1", game_room_id: "r2" });
+    expect(
+      normalizeLobbyFromApi({
+        id: "lob-1",
+        players: ["a"],
+        status: "in_game",
+        game_room_id: "r1",
+        room_id: "ignored",
+      }),
+    ).toMatchObject({ game_room_id: "r1" });
+  });
+
   it("lobbyHasPlayer", () => {
     const lobby = normalizeLobbyFromApi({
       id: "l",

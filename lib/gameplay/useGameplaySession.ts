@@ -309,6 +309,10 @@ export function useGameplaySession({
         return null;
       }
       const hasMod = event.ctrlKey || event.metaKey || event.altKey;
+      const isFunctionKey = /^f\d{1,2}$/i.test(event.key);
+      if (hasMod || isFunctionKey) {
+        event.preventDefault();
+      }
       const k0 = event.key.toLowerCase();
       if (!hasMod && k0.length === 1 && k0 >= "a" && k0 <= "z") {
         return null;
@@ -323,7 +327,6 @@ export function useGameplaySession({
       if (keys.length < 1) {
         return null;
       }
-      event.preventDefault();
       return submitKeys(keys, objIdx);
     },
     [gameState, playerId, roomView, submitKeys],

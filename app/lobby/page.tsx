@@ -42,7 +42,14 @@ import {
 import { copyTextToClipboard } from "@/lib/copyToClipboard";
 import { getLobbyIdFromSearchParams } from "@/lib/lobbyQuery";
 import { lobbyHasPlayer } from "@/lib/lobbyPlayers";
-import { usePlayerConnection } from "@/lib/realtime/playerConnection";
+import {
+  usePlayerConnection,
+  useWebSocketMessageListener,
+} from "@/lib/realtime/playerConnection";
+import {
+  getMessageEventName,
+  mergeServerMessageBody,
+} from "@/lib/realtime/wsMessages";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 3_000;
@@ -180,11 +187,16 @@ function LobbyClient() {
   const [copyError, setCopyError] = useState<string | null>(null);
   const [lastCopyText, setLastCopyText] = useState<string | null>(null);
   const autoJoinAttemptedRef = useRef(false);
+  const navigatedToGameplayRef = useRef(false);
 
   const lobbyId = lobby?.id ?? lobbyIdParam;
 
   useEffect(() => {
     autoJoinAttemptedRef.current = false;
+  }, [lobbyIdParam]);
+
+  useEffect(() => {
+    navigatedToGameplayRef.current = false;
   }, [lobbyIdParam]);
 
   useEffect(() => {
@@ -255,6 +267,81 @@ function LobbyClient() {
     };
   }, [lobbyIdParam, playerId, lobby, refresh]);
 
+  const navigateToGameplayForRoom = useCallback(
+    (room: string) => {
+      const r = room.trim();
+      if (!r) {
+        return;
+      }
+      const lid = lobbyId ?? "";
+      if (!lid) {
+        return;
+      }
+      if (navigatedToGameplayRef.current) {
+        return;
+      }
+      navigatedToGameplayRef.current = true;
+      router.push(
+        `/gameplay?room=${encodeURIComponent(r)}&lobby=${encodeURIComponent(lid)}`,
+      );
+    },
+    [lobbyId, router],
+  );
+
+  useEffect(() => {
+    if (!lobby?.game_room_id) {
+      return;
+    }
+    navigateToGameplayForRoom(lobby.game_room_id);
+  }, [lobby?.game_room_id, navigateToGameplayForRoom]);
+
+  useWebSocketMessageListener(
+    useCallback(
+      (data: unknown) => {
+        if (navigatedToGameplayRef.current) {
+          return;
+        }
+        const name = getMessageEventName(data);
+        if (name === "connect" || !name) {
+          return;
+        }
+        if (
+          name !== "room_snapshot" &&
+          name !== "challenges" &&
+          name !== "game_state_update"
+        ) {
+          return;
+        }
+        const body = mergeServerMessageBody(data);
+        const room =
+          (typeof body.room_id === "string" && body.room_id.trim()) ||
+          (name === "room_snapshot" && typeof body.id === "string"
+            ? body.id.trim()
+            : "");
+        if (!room) {
+          return;
+        }
+        const gs = body.game_state;
+        if (name === "room_snapshot") {
+          if (typeof gs !== "object" || gs === null) {
+            return;
+          }
+        } else if (name === "challenges") {
+          if (
+            !("challenges" in body) &&
+            (typeof gs !== "object" || gs === null)
+          ) {
+            return;
+          }
+        } else if (typeof gs !== "object" || gs === null) {
+          return;
+        }
+        navigateToGameplayForRoom(room);
+      },
+      [navigateToGameplayForRoom],
+    ),
+  );
+
   const onStart = useCallback(async () => {
     if (!lobbyId || !playerId) {
       setActionError("Not ready to start. Check connection and lobby id.");
@@ -274,10 +361,9 @@ function LobbyClient() {
         (typeof res.game_room_id === "string" && res.game_room_id) ||
         "";
       if (room) {
-        router.push(
-          `/gameplay?room=${encodeURIComponent(room)}&lobby=${encodeURIComponent(lobbyId)}`,
-        );
+        navigateToGameplayForRoom(room);
       } else {
+        navigatedToGameplayRef.current = true;
         router.push(`/gameplay?lobby=${encodeURIComponent(lobbyId)}`);
       }
     } catch (e) {
@@ -285,7 +371,7 @@ function LobbyClient() {
     } finally {
       setStartBusy(false);
     }
-  }, [lobbyId, playerId, lobby, router]);
+  }, [lobbyId, playerId, lobby, navigateToGameplayForRoom, router]);
 
   const onLeave = useCallback(async () => {
     if (!lobbyId || !playerId) {
