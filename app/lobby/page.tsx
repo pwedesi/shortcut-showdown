@@ -14,10 +14,45 @@ import {
   IconUser,
   IconUsersGroup,
 } from "@tabler/icons-react";
-import { useCallback, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  getLobby,
+  joinLobby,
+  leaveLobby,
+  startLobby,
+  type Lobby,
+} from "@/lib/api";
+import { formatApiErrorForUi } from "@/lib/api/errors";
+import { loadCallsignFromStorage } from "@/lib/callsign";
+import {
+  getLobbyAccessDisplay,
+  getLobbyLeaderPlayerId,
+  getLobbyMaxPlayers,
+  hasServerShareCode,
+  shortPlayerId,
+} from "@/lib/lobbyDisplay";
+import { copyTextToClipboard } from "@/lib/copyToClipboard";
+import { getLobbyIdFromSearchParams } from "@/lib/lobbyQuery";
+import { lobbyHasPlayer } from "@/lib/lobbyPlayers";
+import {
+  usePlayerConnection,
+  useWebSocketMessageListener,
+} from "@/lib/realtime/playerConnection";
+import {
+  getMessageEventName,
+  mergeServerMessageBody,
+} from "@/lib/realtime/wsMessages";
 import { cn } from "@/lib/utils";
 
-const ACCESS_CODE = "AX79";
+const POLL_MS = 3_000;
 
 /** Lobby shell — dark graphite + #ff8c00 accent. */
 const shell = {
@@ -27,23 +62,21 @@ const shell = {
   accent: "text-[#ff8c00]",
 };
 
-export default function LobbyPage() {
-  const [copied, setCopied] = useState(false);
-
-  const copyLink = useCallback(async () => {
-    const url =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/lobby?code=${ACCESS_CODE}`
-        : "";
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  }, []);
-
+function LobbyShell({
+  children,
+  headerExtra,
+  connLine,
+  reconnectSlot,
+  onLeave,
+  leaveDisabled,
+}: {
+  children: ReactNode;
+  headerExtra: ReactNode;
+  connLine: string;
+  reconnectSlot?: ReactNode;
+  onLeave: () => void;
+  leaveDisabled: boolean;
+}) {
   return (
     <div
       className={cn(
@@ -68,18 +101,19 @@ export default function LobbyPage() {
           >
             SHORTCUT SHOWDOWN
           </div>
+          <span className="hidden font-mono text-[10px] text-[#666] md:block">
+            {headerExtra}
+          </span>
           <nav className="hidden gap-1 text-[11px] font-bold tracking-[0.2em] md:flex">
-            <a
+            <span
               className={cn(
-                "rounded px-3 py-2 transition-colors",
+                "rounded px-3 py-2",
                 shell.accent,
                 "bg-[#ff8c00]/8 shadow-[inset_0_-2px_0_#ff8c00]",
               )}
-              href="#"
-              aria-current="page"
             >
               MULTIPLAYER
-            </a>
+            </span>
             <a
               className={cn(
                 "rounded px-3 py-2 transition-colors hover:bg-white/4",
@@ -102,7 +136,19 @@ export default function LobbyPage() {
             </a>
           </nav>
         </div>
-        <div className="flex items-center gap-1 text-[#ff8c00]">
+        <div className="flex items-center gap-2 text-sm text-[#ff8c00]">
+          <span className="hidden max-w-56 truncate font-mono text-[10px] text-[#888] md:block">
+            {connLine}
+          </span>
+          {reconnectSlot}
+          <button
+            type="button"
+            onClick={onLeave}
+            disabled={leaveDisabled}
+            className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-bold tracking-wider text-[#e8e6e4] transition-colors hover:bg-white/6 disabled:opacity-50"
+          >
+            Leave
+          </button>
           <button
             type="button"
             className="rounded-md p-2.5 transition-colors hover:bg-white/6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]"
@@ -119,8 +165,293 @@ export default function LobbyPage() {
           </button>
         </div>
       </header>
+      {children}
+    </div>
+  );
+}
 
-      <main className="relative z-10 flex flex-1 justify-center overflow-y-auto px-4 pb-36 pt-8 md:px-8 md:pb-28 md:pt-12">
+function LobbyClient() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { status, playerId, lastError, reconnect } = usePlayerConnection();
+
+  const lobbyIdParam = getLobbyIdFromSearchParams(searchParams);
+  const [callsign, setCallsign] = useState("");
+  const [lobby, setLobby] = useState<Lobby | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [startBusy, setStartBusy] = useState(false);
+  const [leaveBusy, setLeaveBusy] = useState(false);
+  const [lastPoll, setLastPoll] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [lastCopyText, setLastCopyText] = useState<string | null>(null);
+  const autoJoinAttemptedRef = useRef(false);
+  const navigatedToGameplayRef = useRef(false);
+
+  const lobbyId = lobby?.id ?? lobbyIdParam;
+
+  useEffect(() => {
+    autoJoinAttemptedRef.current = false;
+  }, [lobbyIdParam]);
+
+  useEffect(() => {
+    navigatedToGameplayRef.current = false;
+  }, [lobbyIdParam]);
+
+  useEffect(() => {
+    setCallsign(loadCallsignFromStorage());
+  }, []);
+
+  const copyLink = useCallback(async () => {
+    if (!lobbyId) return;
+    setCopyError(null);
+    const idOnly = lobbyId.trim();
+    setLastCopyText(idOnly);
+    const ok = await copyTextToClipboard(idOnly);
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } else {
+      setCopyError(
+        "Could not copy automatically. Select the text in the field below and copy (⌘C / Ctrl+C).",
+      );
+    }
+  }, [lobbyId]);
+
+  const refresh = useCallback(async () => {
+    if (!lobbyIdParam) return;
+    setFetchError(null);
+    try {
+      const next = await getLobby(lobbyIdParam);
+      setLobby(next);
+      setLastPoll(Date.now());
+    } catch (e) {
+      setFetchError(formatApiErrorForUi(e));
+    }
+  }, [lobbyIdParam]);
+
+  useEffect(() => {
+    if (!lobbyIdParam) return;
+    void refresh();
+    const t = window.setInterval(() => {
+      void refresh();
+    }, POLL_MS);
+    return () => window.clearInterval(t);
+  }, [lobbyIdParam, refresh]);
+
+  /**
+   * Invite links open `/lobby?id=…` without home "Join". Register this client via POST /join
+   * once and stay on `/lobby` (does not navigate to gameplay).
+   */
+  useEffect(() => {
+    if (!lobbyIdParam || !playerId || !lobby) return;
+    if (lobbyHasPlayer(lobby, playerId)) return;
+    if (autoJoinAttemptedRef.current) return;
+    autoJoinAttemptedRef.current = true;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        await joinLobby(lobbyIdParam, { player_id: playerId });
+        if (!cancelled) await refresh();
+      } catch (e) {
+        if (!cancelled) {
+          setActionError(formatApiErrorForUi(e));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lobbyIdParam, playerId, lobby, refresh]);
+
+  const navigateToGameplayForRoom = useCallback(
+    (room: string) => {
+      const r = room.trim();
+      if (!r) {
+        return;
+      }
+      const lid = lobbyId ?? "";
+      if (!lid) {
+        return;
+      }
+      if (navigatedToGameplayRef.current) {
+        return;
+      }
+      navigatedToGameplayRef.current = true;
+      router.push(
+        `/gameplay?room=${encodeURIComponent(r)}&lobby=${encodeURIComponent(lid)}`,
+      );
+    },
+    [lobbyId, router],
+  );
+
+  useEffect(() => {
+    if (!lobby?.game_room_id) {
+      return;
+    }
+    navigateToGameplayForRoom(lobby.game_room_id);
+  }, [lobby?.game_room_id, navigateToGameplayForRoom]);
+
+  useWebSocketMessageListener(
+    useCallback(
+      (data: unknown) => {
+        if (navigatedToGameplayRef.current) {
+          return;
+        }
+        const name = getMessageEventName(data);
+        if (name === "connect" || !name) {
+          return;
+        }
+        if (
+          name !== "room_snapshot" &&
+          name !== "challenges" &&
+          name !== "game_state_update"
+        ) {
+          return;
+        }
+        const body = mergeServerMessageBody(data);
+        const room =
+          (typeof body.room_id === "string" && body.room_id.trim()) ||
+          (name === "room_snapshot" && typeof body.id === "string"
+            ? body.id.trim()
+            : "");
+        if (!room) {
+          return;
+        }
+        const gs = body.game_state;
+        if (name === "room_snapshot") {
+          if (typeof gs !== "object" || gs === null) {
+            return;
+          }
+        } else if (name === "challenges") {
+          if (
+            !("challenges" in body) &&
+            (typeof gs !== "object" || gs === null)
+          ) {
+            return;
+          }
+        } else if (typeof gs !== "object" || gs === null) {
+          return;
+        }
+        navigateToGameplayForRoom(room);
+      },
+      [navigateToGameplayForRoom],
+    ),
+  );
+
+  const onStart = useCallback(async () => {
+    if (!lobbyId || !playerId) {
+      setActionError("Not ready to start. Check connection and lobby id.");
+      return;
+    }
+    if (!lobby || getLobbyLeaderPlayerId(lobby) !== playerId) {
+      setActionError("Only the room leader can start the match.");
+      return;
+    }
+    setActionError(null);
+    setStartBusy(true);
+    try {
+      const res = await startLobby(lobbyId, { player_id: playerId });
+      const room =
+        (typeof res.id === "string" && res.id) ||
+        (typeof res.room_id === "string" && res.room_id) ||
+        (typeof res.game_room_id === "string" && res.game_room_id) ||
+        "";
+      if (room) {
+        navigateToGameplayForRoom(room);
+      } else {
+        navigatedToGameplayRef.current = true;
+        router.push(`/gameplay?lobby=${encodeURIComponent(lobbyId)}`);
+      }
+    } catch (e) {
+      setActionError(formatApiErrorForUi(e));
+    } finally {
+      setStartBusy(false);
+    }
+  }, [lobbyId, playerId, lobby, navigateToGameplayForRoom, router]);
+
+  const onLeave = useCallback(async () => {
+    if (!lobbyId || !playerId) {
+      router.push("/");
+      return;
+    }
+    setLeaveBusy(true);
+    try {
+      await leaveLobby(lobbyId, { player_id: playerId });
+    } catch {
+      // still go home; server may be unreachable
+    } finally {
+      setLeaveBusy(false);
+      router.push("/");
+    }
+  }, [lobbyId, playerId, router]);
+
+  if (!lobbyIdParam) {
+    return (
+      <LobbyShell
+        headerExtra="No lobby"
+        connLine="—"
+        onLeave={() => {
+          router.push("/");
+        }}
+        leaveDisabled={false}
+        reconnectSlot={
+          <button
+            type="button"
+            onClick={reconnect}
+            className="hidden rounded border border-white/15 px-2 py-1 text-[10px] text-[#ff8c00] md:block"
+          >
+            Retry RT
+          </button>
+        }
+      >
+        <main className="flex flex-1 items-center justify-center p-8">
+          <p className="text-center text-[#c45c4a]">
+            Missing lobby. Open a link with{" "}
+            <span className="font-mono">?id=</span> or{" "}
+            <span className="font-mono">?code=</span>.
+          </p>
+        </main>
+      </LobbyShell>
+    );
+  }
+
+  const maxP = getLobbyMaxPlayers(lobby);
+  const count = lobby?.players?.length ?? 0;
+  const leaderId = lobby ? getLobbyLeaderPlayerId(lobby) : null;
+  const isRoomLeader = Boolean(
+    playerId && leaderId && playerId === leaderId,
+  );
+  const access = getLobbyAccessDisplay(lobby, lobbyIdParam);
+  const accessHeroIsLong = access.length > 12;
+  const accessLabel = hasServerShareCode(lobby) ? "ACCESS CODE" : "LOBBY ID";
+  const connLine =
+    status === "connected" && lastPoll
+      ? `Poll ${new Date(lastPoll).toLocaleTimeString()} · RT: ${status}`
+      : status === "reconnecting" || status === "connecting"
+        ? "Realtime: connecting…"
+        : `Realtime: ${status}${lastError ? ` · ${lastError}` : ""}`;
+
+  return (
+    <LobbyShell
+      headerExtra={lobby ? `Status: ${lobby.status}` : "…"}
+      connLine={connLine}
+      reconnectSlot={
+        <button
+          type="button"
+          onClick={reconnect}
+          className="hidden rounded border border-white/15 px-2 py-1 text-[10px] text-[#ff8c00] md:block"
+        >
+          Retry RT
+        </button>
+      }
+      onLeave={onLeave}
+      leaveDisabled={leaveBusy}
+    >
+      <main className="relative z-10 flex min-w-0 flex-1 justify-center overflow-x-hidden overflow-y-auto px-4 pb-36 pt-8 md:px-8 md:pb-28 md:pt-12">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-grid-home opacity-[0.12]"
@@ -129,6 +460,23 @@ export default function LobbyPage() {
           aria-hidden
           className="pointer-events-none absolute right-[-10%] top-[-5%] h-[min(70vh,520px)] w-[min(70vw,520px)] rounded-full bg-[#ff8c00]/6 blur-[120px]"
         />
+
+        {fetchError && (
+          <div
+            role="alert"
+            className="absolute left-1/2 top-4 z-20 w-[min(32rem,90vw)] -translate-x-1/2 rounded-sm border border-[#c45c4a]/50 bg-[#2a1111] px-4 py-2 text-sm text-[#f0c0b8]"
+          >
+            {fetchError}
+          </div>
+        )}
+        {actionError && (
+          <div
+            role="alert"
+            className="absolute left-1/2 top-16 z-20 w-[min(32rem,90vw)] -translate-x-1/2 rounded-sm border border-[#c45c4a]/50 bg-[#2a1111] px-4 py-2 text-sm text-[#f0c0b8] md:top-4"
+          >
+            {actionError}
+          </div>
+        )}
 
         <div className="relative grid w-full max-w-6xl grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
           <div className="flex flex-col gap-6 lg:col-span-4">
@@ -140,28 +488,47 @@ export default function LobbyPage() {
             >
               <div
                 aria-hidden
-                className="absolute inset-0 bg-linear-to-b from-white/6 to-transparent opacity-30"
+                className="pointer-events-none absolute inset-0 bg-linear-to-b from-white/6 to-transparent opacity-30"
               />
               <div
                 aria-hidden
-                className="absolute bottom-0 left-0 h-0.5 w-full bg-linear-to-r from-transparent via-[#ff8c00] to-transparent shadow-[0_0_12px_rgba(255,140,0,0.5)]"
+                className="pointer-events-none absolute bottom-0 left-0 h-0.5 w-full bg-linear-to-r from-transparent via-[#ff8c00] to-transparent shadow-[0_0_12px_rgba(255,140,0,0.5)]"
               />
+              <div className="relative z-10 flex w-full max-w-full flex-col items-center">
               <span
                 className={cn(
                   "mb-3 font-sans text-[11px] font-semibold uppercase tracking-[0.35em]",
                   shell.accent,
                 )}
               >
-                ACCESS CODE
+                {accessLabel}
               </span>
-              <h1 className="font-sans text-6xl font-black tracking-[-0.06em] text-white md:text-8xl">
-                {ACCESS_CODE}
+              <h1
+                className={cn(
+                  "max-w-full wrap-break-word text-center font-black text-white",
+                  accessHeroIsLong
+                    ? "font-mono text-base font-bold leading-snug tracking-tight sm:text-lg md:text-xl"
+                    : "font-sans text-4xl tracking-[-0.06em] sm:text-6xl md:text-8xl",
+                )}
+              >
+                {lobby ? access : "…"}
               </h1>
+              {lobby && accessHeroIsLong ? (
+                <p
+                  className={cn(
+                    "mt-3 max-w-xs text-center font-sans text-[10px] leading-relaxed tracking-wide",
+                    shell.muted,
+                  )}
+                >
+                  On the home screen, paste this id in Join, or open this page’s
+                  URL in the browser — short snippets of the id are not valid.
+                </p>
+              ) : null}
               <button
                 type="button"
                 onClick={copyLink}
                 className={cn(
-                  "group mt-8 flex items-center gap-2.5 rounded-sm px-2 py-1.5 transition-colors",
+                  "group relative z-10 mt-8 flex min-h-11 cursor-pointer items-center gap-2.5 rounded-sm px-3 py-2.5 transition-colors",
                   "text-[#ff8c00] hover:bg-[#ff8c00]/10 hover:text-[#ffb366]",
                   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
                 )}
@@ -170,9 +537,26 @@ export default function LobbyPage() {
                   <IconCopy className="size-4" stroke={1.5} aria-hidden />
                 </span>
                 <span className="text-xs font-bold tracking-[0.25em]">
-                  {copied ? "COPIED" : "COPY LINK"}
+                  {copied ? "COPIED" : "COPY ID"}
                 </span>
               </button>
+              {copyError && lastCopyText ? (
+                <div className="mt-3 w-full max-w-[min(100%,20rem)] px-1">
+                  <p className="mb-1.5 text-center text-[10px] leading-relaxed text-[#e8a090]">
+                    {copyError}
+                  </p>
+                  <input
+                    type="text"
+                    readOnly
+                    aria-label="Lobby id to copy"
+                    className="w-full cursor-text select-all rounded-sm border border-white/10 bg-[#0a0a0a] px-2 py-2 font-mono text-[10px] text-[#e8e6e4] focus:border-[#ff8c00]/50 focus:outline-none"
+                    value={lastCopyText}
+                    onClick={(e) => e.currentTarget.select()}
+                    onFocus={(e) => e.currentTarget.select()}
+                  />
+                </div>
+              ) : null}
+              </div>
             </div>
 
             <div className={cn("flex flex-col gap-5 p-6 md:p-7", shell.card)}>
@@ -186,9 +570,30 @@ export default function LobbyPage() {
                 PARAMETERS
               </h2>
               <div className="grid grid-cols-2 gap-3">
-                <ParamCell label="MODE" value="SPRINT" />
-                <ParamCell label="TRACK" value="NEON_04" />
-                <ParamCell label="LAPS" value="05" />
+                <ParamCell
+                  label="CHALLENGES"
+                  value={
+                    lobby?.challenge_count != null
+                      ? String(lobby.challenge_count)
+                      : "…"
+                  }
+                />
+                <ParamCell
+                  label="ROUND (SEC)"
+                  value={
+                    lobby?.round_duration_seconds != null
+                      ? String(lobby.round_duration_seconds)
+                      : "…"
+                  }
+                />
+                <ParamCell
+                  label="MAX ATTEMPTS / SEC"
+                  value={
+                    lobby?.max_attempts_per_second != null
+                      ? String(lobby.max_attempts_per_second)
+                      : "…"
+                  }
+                />
                 <div className="border border-white/6 bg-[#0c0c0c] p-4">
                   <span
                     className={cn(
@@ -196,10 +601,10 @@ export default function LobbyPage() {
                       shell.muted,
                     )}
                   >
-                    COLLISION
+                    LOBBY
                   </span>
-                  <span className="font-mono text-lg font-semibold tracking-wide text-[#c45c4a]">
-                    OFF
+                  <span className="font-mono text-sm font-semibold tracking-wide text-white">
+                    {lobby?.status ?? "…"}
                   </span>
                 </div>
               </div>
@@ -207,7 +612,9 @@ export default function LobbyPage() {
           </div>
 
           <div className="flex flex-col gap-6 lg:col-span-8">
-            <div className={cn("flex flex-1 flex-col overflow-hidden", shell.card)}>
+            <div
+              className={cn("flex flex-1 flex-col overflow-hidden", shell.card)}
+            >
               <div className="flex items-center justify-between gap-4 border-b border-white/6 bg-[#0f0f0f]/80 px-5 py-4 md:px-6">
                 <h2
                   className={cn(
@@ -224,76 +631,66 @@ export default function LobbyPage() {
                     "font-mono text-[11px] font-semibold tracking-wide text-[#ff8c00]",
                   )}
                 >
-                  3/8 CONNECTED
+                  {lobby
+                    ? `${count}/${maxP} CONNECTED`
+                    : "LOADING…"}
                 </span>
               </div>
 
               <div className="flex flex-col gap-3 p-5 md:gap-3.5 md:p-6">
-                <div
-                  className={cn(
-                    "relative flex items-center justify-between gap-3 overflow-hidden",
-                    "border border-[#ff8c00]/20 bg-[#1a1a1a] py-3 pl-4 pr-3 md:py-4",
-                  )}
-                >
+                {!lobby && (
+                  <p className={cn("text-sm", shell.muted)}>Loading lobby…</p>
+                )}
+                {lobby &&
+                  lobby.players.map((p, i) => {
+                    const pid = p.player_id;
+                    const isYou = playerId != null && pid === playerId;
+                    const isLead = leaderId != null && pid === leaderId;
+                    const remoteLabel =
+                      p.display_name && p.display_name.trim()
+                        ? p.display_name.trim()
+                        : `Player ${shortPlayerId(pid)}`;
+                    const name = isYou
+                      ? callsign.trim() !== ""
+                        ? `${callsign} (you)`
+                        : "You"
+                      : remoteLabel;
+                    return (
+                      <PlayerRow
+                        key={`${pid}-${i}`}
+                        slot={`P${i + 1}`}
+                        name={name}
+                        highlight={isYou}
+                        isRoomLeader={isLead}
+                        status={isYou ? "ready" : "waiting"}
+                      />
+                    );
+                  })}
+
+                {lobby && count < maxP && (
                   <div
-                    aria-hidden
-                    className="absolute bottom-0 left-0 top-0 w-1 bg-linear-to-b from-[#ff8c00] via-[#ffb366] to-[#ff8c00] shadow-[0_0_12px_rgba(255,140,0,0.5)]"
-                  />
-                  <div className="z-10 flex min-w-0 items-center gap-3 md:gap-4">
-                    <div
+                    className={cn(
+                      "flex min-h-18 items-center justify-center border border-dashed border-white/8 bg-black/20",
+                    )}
+                  >
+                    <span
                       className={cn(
-                        "flex size-11 shrink-0 items-center justify-center border border-white/8 bg-black/50 font-mono text-lg font-bold",
-                        shell.accent,
+                        "flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.25em]",
+                        shell.muted,
                       )}
                     >
-                      P1
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="truncate text-base font-bold uppercase leading-tight tracking-tight text-white md:text-lg">
-                        USER_X01 (YOU)
-                      </h3>
-                      <span className={cn("font-mono text-[11px] tracking-wide", shell.muted)}>
-                        LATENCY: 12ms
-                      </span>
-                    </div>
-                  </div>
-                  <div
-                    className={cn(
-                      "z-10 flex shrink-0 items-center gap-2 rounded-sm px-3 py-2 md:px-4",
-                      "bg-linear-to-br from-[#ff8c00] to-[#ff6a00] text-[#2a1200]",
-                      "shadow-[0_0_20px_rgba(255,140,0,0.35)]",
-                    )}
-                  >
-                    <IconCheck className="size-4 shrink-0" stroke={2.5} aria-hidden />
-                    <span className="text-[10px] font-bold tracking-[0.2em] uppercase">
-                      READY
+                      <IconPlus className="size-4 opacity-70" stroke={1.5} />
+                      WAITING FOR DRIVER
                     </span>
                   </div>
-                </div>
-
-                <PlayerRow slot="P2" name="CYBER_DRIFTER" latency="45ms" />
-                <PlayerRow slot="P3" name="NOVA_PULSE" latency="28ms" />
-
-                <div
-                  className={cn(
-                    "flex min-h-18 items-center justify-center border border-dashed border-white/8 bg-black/20",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.25em]",
-                      shell.muted,
-                    )}
-                  >
-                    <IconPlus className="size-4 opacity-70" stroke={1.5} />
-                    WAITING FOR DRIVER
-                  </span>
-                </div>
+                )}
               </div>
             </div>
 
             <button
               type="button"
+              onClick={onStart}
+              disabled={startBusy || !playerId || !isRoomLeader}
               className={cn(
                 "group relative flex h-18 w-full items-center justify-center gap-3 overflow-hidden rounded-sm transition-all duration-300 md:h-20 md:gap-4",
                 "bg-linear-to-r from-[#ff7700] via-[#ff9f4a] to-[#ffc49a]",
@@ -302,6 +699,7 @@ export default function LobbyPage() {
                 "hover:shadow-[0_0_0_1px_rgba(255,220,190,0.35)_inset,0_12px_48px_rgba(255,120,0,0.45),0_0_80px_rgba(255,160,80,0.25)]",
                 "active:scale-[0.99]",
                 "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
+                "disabled:opacity-50",
               )}
             >
               <span
@@ -310,9 +708,20 @@ export default function LobbyPage() {
               />
               <IconPlayerPlayFilled className="relative size-8 shrink-0 md:size-9" />
               <span className="relative font-sans text-xl font-black uppercase tracking-[0.18em] md:text-2xl">
-                INITIATE LAUNCH
+                {startBusy ? "STARTING…" : "INITIATE LAUNCH"}
               </span>
             </button>
+            {!playerId && (
+              <p className="text-center text-xs text-[#c45c4a]/90">
+                Waiting for player id from the server. Check realtime connection
+                and Retry on the home screen.
+              </p>
+            )}
+            {playerId && lobby && !isRoomLeader && (
+              <p className="text-center text-xs text-[#888888]">
+                Only the room leader can start. Wait for the host to launch.
+              </p>
+            )}
           </div>
         </div>
       </main>
@@ -343,7 +752,31 @@ export default function LobbyPage() {
           SHOP
         </a>
       </nav>
-    </div>
+    </LobbyShell>
+  );
+}
+
+function LobbyLoading() {
+  return (
+    <LobbyShell
+      headerExtra="…"
+      connLine="…"
+      onLeave={() => {}}
+      leaveDisabled
+      reconnectSlot={null}
+    >
+      <main className="flex flex-1 items-center justify-center p-8 text-[#888]">
+        Loading…
+      </main>
+    </LobbyShell>
+  );
+}
+
+export default function LobbyPage() {
+  return (
+    <Suspense fallback={<LobbyLoading />}>
+      <LobbyClient />
+    </Suspense>
   );
 }
 
@@ -368,23 +801,43 @@ function ParamCell({ label, value }: { label: string; value: string }) {
 function PlayerRow({
   slot,
   name,
-  latency,
+  status,
+  highlight,
+  isRoomLeader,
 }: {
   slot: string;
   name: string;
-  latency: string;
+  status: "ready" | "waiting";
+  highlight?: boolean;
+  isRoomLeader?: boolean;
 }) {
+  const subtitle = isRoomLeader
+    ? highlight
+      ? "YOU · ROOM LEAD"
+      : "ROOM LEAD"
+    : highlight
+      ? "YOU"
+      : "PEER";
   return (
     <div
       className={cn(
-        "group flex items-center justify-between gap-3 border border-white/6 bg-[#1a1a1a] py-3 pl-4 pr-3 transition-colors hover:border-white/10 md:py-4",
+        "group relative flex items-center justify-between gap-3 overflow-hidden border py-3 pl-4 pr-3 transition-colors md:py-4",
+        highlight
+          ? "border-[#ff8c00]/20 bg-[#1a1a1a]"
+          : "border-white/6 bg-[#1a1a1a] hover:border-white/10",
       )}
     >
-      <div className="flex min-w-0 items-center gap-3 md:gap-4">
+      {highlight ? (
+        <div
+          aria-hidden
+          className="absolute bottom-0 left-0 top-0 w-1 bg-linear-to-b from-[#ff8c00] via-[#ffb366] to-[#ff8c00] shadow-[0_0_12px_rgba(255,140,0,0.5)]"
+        />
+      ) : null}
+      <div className="relative z-10 flex min-w-0 items-center gap-3 md:gap-4">
         <div
           className={cn(
             "flex size-11 shrink-0 items-center justify-center border border-white/8 bg-black/50 font-mono text-lg font-bold",
-            "text-[#a8a6a4]",
+            highlight ? shell.accent : "text-[#a8a6a4]",
           )}
         >
           {slot}
@@ -393,21 +846,38 @@ function PlayerRow({
           <h3 className="truncate text-base font-bold uppercase leading-tight tracking-tight text-white md:text-lg">
             {name}
           </h3>
-          <span className={cn("font-mono text-[11px] tracking-wide", shell.muted)}>
-            LATENCY: {latency}
+          <span
+            className={cn("font-mono text-[11px] tracking-wide", shell.muted)}
+          >
+            {subtitle}
           </span>
         </div>
       </div>
-      <div
-        className={cn(
-          "flex shrink-0 items-center gap-2 rounded-sm border border-white/8 bg-[#252525] px-3 py-2 md:px-4",
-        )}
-      >
-        <IconClock className="size-4 text-[#888888]" stroke={1.5} />
-        <span className="text-[10px] font-bold tracking-[0.2em] text-[#888888] uppercase">
-          WAITING
-        </span>
-      </div>
+      {status === "ready" ? (
+        <div
+          className={cn(
+            "z-10 flex shrink-0 items-center gap-2 rounded-sm px-3 py-2 md:px-4",
+            "bg-linear-to-br from-[#ff8c00] to-[#ff6a00] text-[#2a1200]",
+            "shadow-[0_0_20px_rgba(255,140,0,0.35)]",
+          )}
+        >
+          <IconCheck className="size-4 shrink-0" stroke={2.5} aria-hidden />
+          <span className="text-[10px] font-bold tracking-[0.2em] uppercase">
+            READY
+          </span>
+        </div>
+      ) : (
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-2 rounded-sm border border-white/8 bg-[#252525] px-3 py-2 md:px-4",
+          )}
+        >
+          <IconClock className="size-4 text-[#888888]" stroke={1.5} />
+          <span className="text-[10px] font-bold tracking-[0.2em] text-[#888888] uppercase">
+            WAITING
+          </span>
+        </div>
+      )}
     </div>
   );
 }

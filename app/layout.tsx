@@ -4,6 +4,7 @@ import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 import { Space_Grotesk } from "next/font/google";
 import { cn } from "@/lib/utils";
+import { Providers } from "./providers";
 
 const spaceGrotesk = Space_Grotesk({subsets:['latin'],variable:'--font-sans'});
 
@@ -30,7 +31,7 @@ export default function RootLayout({
       )}
     >
       <body className="flex min-h-full min-h-svh flex-col overflow-x-hidden">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
