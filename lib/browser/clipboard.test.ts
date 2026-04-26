@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { copyTextToClipboard } from "@/lib/copyToClipboard";
+import { copyTextToClipboard } from "@/lib/browser";
 
 describe("copyTextToClipboard", () => {
   beforeEach(() => {

@@ -32,16 +32,16 @@ import {
 } from "@/lib/api";
 import { formatApiErrorForUi } from "@/lib/api/errors";
 import { loadCallsignFromStorage } from "@/lib/callsign";
+import { copyTextToClipboard } from "@/lib/browser";
 import {
   getLobbyAccessDisplay,
+  getLobbyIdFromSearchParams,
   getLobbyLeaderPlayerId,
   getLobbyMaxPlayers,
   hasServerShareCode,
+  lobbyHasPlayer,
   shortPlayerId,
-} from "@/lib/lobbyDisplay";
-import { copyTextToClipboard } from "@/lib/copyToClipboard";
-import { getLobbyIdFromSearchParams } from "@/lib/lobbyQuery";
-import { lobbyHasPlayer } from "@/lib/lobbyPlayers";
+} from "@/lib/lobby";
 import {
   usePlayerConnection,
   useWebSocketMessageListener,

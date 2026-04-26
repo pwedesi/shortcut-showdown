@@ -11,7 +11,7 @@ import { createLobby, joinLobby, ApiError } from "@/lib/api";
 import { formatApiErrorForUi } from "@/lib/api/errors";
 import { loadCallsignFromStorage, saveCallsignToStorage } from "@/lib/callsign";
 import { getAppDisplayVersion } from "@/lib/config";
-import { buildLobbyPath, parseJoinLobbyInput } from "@/lib/lobbyQuery";
+import { buildLobbyPath, parseJoinLobbyInput } from "@/lib/lobby";
 import { usePlayerConnection } from "@/lib/realtime/playerConnection";
 
 function connectionLabel(

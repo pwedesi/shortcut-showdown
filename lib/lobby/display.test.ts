@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getLobbyLeaderPlayerId } from "@/lib/lobbyDisplay";
+import { getLobbyLeaderPlayerId } from "@/lib/lobby";
 
 const p = (id: string, opts?: { is_leader?: boolean }) => ({
   player_id: id,

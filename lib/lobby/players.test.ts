@@ -3,7 +3,7 @@ import {
   lobbyHasPlayer,
   lobbyPlayerEntryToId,
   normalizeLobbyFromApi,
-} from "@/lib/lobbyPlayers";
+} from "@/lib/lobby";
 
 describe("lobbyPlayers", () => {
   it("lobbyPlayerEntryToId accepts strings and common object shapes", () => {

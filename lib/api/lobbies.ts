@@ -1,6 +1,6 @@
 import { apiRequest } from "@/lib/api/client";
 import type { GameRoomView, Lobby } from "@/lib/api/types";
-import { normalizeLobbyFromApi } from "@/lib/lobbyPlayers";
+import { normalizeLobbyFromApi } from "@/lib/lobby/players";
 
 function encodeSegment(id: string): string {
   return encodeURIComponent(id);
