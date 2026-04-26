@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getGameRoom, submitGameAttempt } from "@/lib/api/gameRooms";
+import {
+  createRematch,
+  getGameRoom,
+  getMatchResults,
+  submitGameAttempt,
+} from "@/lib/api/gameRooms";
 
 const ROOM_ID = "room-42";
 const API = "http://test.local";
@@ -99,6 +104,50 @@ describe("game room API client", () => {
           keys: ["ctrl", "c"],
           attempt_id: "a1",
         }),
+      }),
+    );
+  });
+
+  it("getMatchResults GETs with optional player_id query", async () => {
+    const body = {
+      room_id: ROOM_ID,
+      you_player_id: "p1",
+      placements: [],
+      winner_player_id: "p1",
+      draw: false,
+      end_reason: "goal",
+      ended_at: 1,
+      finished: true,
+    };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const out = await getMatchResults(ROOM_ID, { viewerPlayerId: "p1" });
+    expect(out.room_id).toBe(ROOM_ID);
+    expect(fetch).toHaveBeenCalledWith(
+      `${API}/game-rooms/${encodeURIComponent(ROOM_ID)}/results?player_id=p1`,
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("createRematch POSTs player_id", async () => {
+    const body = { room_id: ROOM_ID, next_lobby_id: "lobby-next" };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(body), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const out = await createRematch(ROOM_ID, { player_id: "p1" });
+    expect(out.next_lobby_id).toBe("lobby-next");
+    expect(fetch).toHaveBeenCalledWith(
+      `${API}/game-rooms/${encodeURIComponent(ROOM_ID)}/rematch`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ player_id: "p1" }),
       }),
     );
   });
