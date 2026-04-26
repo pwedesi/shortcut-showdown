@@ -34,12 +34,14 @@ import { formatApiErrorForUi } from "@/lib/api/errors";
 import { loadCallsignFromStorage } from "@/lib/callsign";
 import {
   getLobbyAccessDisplay,
+  getLobbyLeaderPlayerId,
   getLobbyMaxPlayers,
   hasServerShareCode,
   shortPlayerId,
 } from "@/lib/lobbyDisplay";
 import { copyTextToClipboard } from "@/lib/copyToClipboard";
 import { getLobbyIdFromSearchParams } from "@/lib/lobbyQuery";
+import { lobbyHasPlayer } from "@/lib/lobbyPlayers";
 import { usePlayerConnection } from "@/lib/realtime/playerConnection";
 import { cn } from "@/lib/utils";
 
@@ -167,7 +169,7 @@ function LobbyClient() {
   const { status, playerId, lastError, reconnect } = usePlayerConnection();
 
   const lobbyIdParam = getLobbyIdFromSearchParams(searchParams);
-  const [callsign, setCallsign] = useState("OPERATOR_01");
+  const [callsign, setCallsign] = useState("");
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -232,7 +234,7 @@ function LobbyClient() {
    */
   useEffect(() => {
     if (!lobbyIdParam || !playerId || !lobby) return;
-    if (lobby.players.includes(playerId)) return;
+    if (lobbyHasPlayer(lobby, playerId)) return;
     if (autoJoinAttemptedRef.current) return;
     autoJoinAttemptedRef.current = true;
 
@@ -258,13 +260,18 @@ function LobbyClient() {
       setActionError("Not ready to start. Check connection and lobby id.");
       return;
     }
+    if (!lobby || getLobbyLeaderPlayerId(lobby) !== playerId) {
+      setActionError("Only the room leader can start the match.");
+      return;
+    }
     setActionError(null);
     setStartBusy(true);
     try {
       const res = await startLobby(lobbyId, { player_id: playerId });
       const room =
-        (typeof res?.room_id === "string" && res.room_id) ||
-        (typeof res?.game_room_id === "string" && res.game_room_id) ||
+        (typeof res.id === "string" && res.id) ||
+        (typeof res.room_id === "string" && res.room_id) ||
+        (typeof res.game_room_id === "string" && res.game_room_id) ||
         "";
       if (room) {
         router.push(
@@ -278,7 +285,7 @@ function LobbyClient() {
     } finally {
       setStartBusy(false);
     }
-  }, [lobbyId, playerId, router]);
+  }, [lobbyId, playerId, lobby, router]);
 
   const onLeave = useCallback(async () => {
     if (!lobbyId || !playerId) {
@@ -328,6 +335,10 @@ function LobbyClient() {
 
   const maxP = getLobbyMaxPlayers(lobby);
   const count = lobby?.players?.length ?? 0;
+  const leaderId = lobby ? getLobbyLeaderPlayerId(lobby) : null;
+  const isRoomLeader = Boolean(
+    playerId && leaderId && playerId === leaderId,
+  );
   const access = getLobbyAccessDisplay(lobby, lobbyIdParam);
   const accessHeroIsLong = access.length > 12;
   const accessLabel = hasServerShareCode(lobby) ? "ACCESS CODE" : "LOBBY ID";
@@ -354,7 +365,7 @@ function LobbyClient() {
       onLeave={onLeave}
       leaveDisabled={leaveBusy}
     >
-      <main className="relative z-10 flex flex-1 justify-center overflow-y-auto px-4 pb-36 pt-8 md:px-8 md:pb-28 md:pt-12">
+      <main className="relative z-10 flex min-w-0 flex-1 justify-center overflow-x-hidden overflow-y-auto px-4 pb-36 pt-8 md:px-8 md:pb-28 md:pt-12">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-grid-home opacity-[0.12]"
@@ -473,9 +484,30 @@ function LobbyClient() {
                 PARAMETERS
               </h2>
               <div className="grid grid-cols-2 gap-3">
-                <ParamCell label="MODE" value="SPRINT" />
-                <ParamCell label="TRACK" value="NEON_04" />
-                <ParamCell label="LAPS" value="05" />
+                <ParamCell
+                  label="CHALLENGES"
+                  value={
+                    lobby?.challenge_count != null
+                      ? String(lobby.challenge_count)
+                      : "…"
+                  }
+                />
+                <ParamCell
+                  label="ROUND (SEC)"
+                  value={
+                    lobby?.round_duration_seconds != null
+                      ? String(lobby.round_duration_seconds)
+                      : "…"
+                  }
+                />
+                <ParamCell
+                  label="MAX ATTEMPTS / SEC"
+                  value={
+                    lobby?.max_attempts_per_second != null
+                      ? String(lobby.max_attempts_per_second)
+                      : "…"
+                  }
+                />
                 <div className="border border-white/6 bg-[#0c0c0c] p-4">
                   <span
                     className={cn(
@@ -524,17 +556,26 @@ function LobbyClient() {
                   <p className={cn("text-sm", shell.muted)}>Loading lobby…</p>
                 )}
                 {lobby &&
-                  lobby.players.map((pid, i) => {
+                  lobby.players.map((p, i) => {
+                    const pid = p.player_id;
                     const isYou = playerId != null && pid === playerId;
+                    const isLead = leaderId != null && pid === leaderId;
+                    const remoteLabel =
+                      p.display_name && p.display_name.trim()
+                        ? p.display_name.trim()
+                        : `Player ${shortPlayerId(pid)}`;
                     const name = isYou
-                      ? `${callsign} (you)`
-                      : `Player ${shortPlayerId(pid)}`;
+                      ? callsign.trim() !== ""
+                        ? `${callsign} (you)`
+                        : "You"
+                      : remoteLabel;
                     return (
                       <PlayerRow
                         key={`${pid}-${i}`}
                         slot={`P${i + 1}`}
                         name={name}
                         highlight={isYou}
+                        isRoomLeader={isLead}
                         status={isYou ? "ready" : "waiting"}
                       />
                     );
@@ -563,7 +604,7 @@ function LobbyClient() {
             <button
               type="button"
               onClick={onStart}
-              disabled={startBusy || !playerId}
+              disabled={startBusy || !playerId || !isRoomLeader}
               className={cn(
                 "group relative flex h-18 w-full items-center justify-center gap-3 overflow-hidden rounded-sm transition-all duration-300 md:h-20 md:gap-4",
                 "bg-linear-to-r from-[#ff7700] via-[#ff9f4a] to-[#ffc49a]",
@@ -588,6 +629,11 @@ function LobbyClient() {
               <p className="text-center text-xs text-[#c45c4a]/90">
                 Waiting for player id from the server. Check realtime connection
                 and Retry on the home screen.
+              </p>
+            )}
+            {playerId && lobby && !isRoomLeader && (
+              <p className="text-center text-xs text-[#888888]">
+                Only the room leader can start. Wait for the host to launch.
               </p>
             )}
           </div>
@@ -671,12 +717,21 @@ function PlayerRow({
   name,
   status,
   highlight,
+  isRoomLeader,
 }: {
   slot: string;
   name: string;
   status: "ready" | "waiting";
   highlight?: boolean;
+  isRoomLeader?: boolean;
 }) {
+  const subtitle = isRoomLeader
+    ? highlight
+      ? "YOU · ROOM LEAD"
+      : "ROOM LEAD"
+    : highlight
+      ? "YOU"
+      : "PEER";
   return (
     <div
       className={cn(
@@ -708,7 +763,7 @@ function PlayerRow({
           <span
             className={cn("font-mono text-[11px] tracking-wide", shell.muted)}
           >
-            {highlight ? "YOU" : "PEER"}
+            {subtitle}
           </span>
         </div>
       </div>

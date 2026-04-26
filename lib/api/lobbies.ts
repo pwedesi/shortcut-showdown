@@ -1,33 +1,39 @@
 import { apiRequest } from "@/lib/api/client";
-import type { Lobby, StartLobbyResponse } from "@/lib/api/types";
+import type { GameRoomView, Lobby } from "@/lib/api/types";
+import { normalizeLobbyFromApi } from "@/lib/lobbyPlayers";
 
 function encodeSegment(id: string): string {
   return encodeURIComponent(id);
 }
 
 /** POST /lobbies — create; body includes player_id. */
-export function createLobby(
+export async function createLobby(
   body: { player_id: string },
   options?: { signal?: AbortSignal },
 ): Promise<Lobby> {
-  return apiRequest<Lobby>("/lobbies", {
+  const data = await apiRequest<unknown>("/lobbies", {
     method: "POST",
     body,
     signal: options?.signal,
   });
+  return normalizeLobbyFromApi(data);
 }
 
 /** POST /lobbies/{lobby_id}/join */
-export function joinLobby(
+export async function joinLobby(
   lobbyId: string,
   body: { player_id: string },
   options?: { signal?: AbortSignal },
 ): Promise<Lobby> {
-  return apiRequest<Lobby>(`/lobbies/${encodeSegment(lobbyId)}/join`, {
-    method: "POST",
-    body,
-    signal: options?.signal,
-  });
+  const data = await apiRequest<unknown>(
+    `/lobbies/${encodeSegment(lobbyId)}/join`,
+    {
+      method: "POST",
+      body,
+      signal: options?.signal,
+    },
+  );
+  return normalizeLobbyFromApi(data);
 }
 
 /** POST /lobbies/{lobby_id}/leave */
@@ -48,8 +54,8 @@ export function startLobby(
   lobbyId: string,
   body: { player_id: string },
   options?: { signal?: AbortSignal },
-): Promise<StartLobbyResponse> {
-  return apiRequest<StartLobbyResponse>(
+): Promise<GameRoomView> {
+  return apiRequest<GameRoomView>(
     `/lobbies/${encodeSegment(lobbyId)}/start`,
     {
       method: "POST",
@@ -60,12 +66,16 @@ export function startLobby(
 }
 
 /** GET /lobbies/{lobby_id} */
-export function getLobby(
+export async function getLobby(
   lobbyId: string,
   options?: { signal?: AbortSignal },
 ): Promise<Lobby> {
-  return apiRequest<Lobby>(`/lobbies/${encodeSegment(lobbyId)}`, {
-    method: "GET",
-    signal: options?.signal,
-  });
+  const data = await apiRequest<unknown>(
+    `/lobbies/${encodeSegment(lobbyId)}`,
+    {
+      method: "GET",
+      signal: options?.signal,
+    },
+  );
+  return normalizeLobbyFromApi(data);
 }

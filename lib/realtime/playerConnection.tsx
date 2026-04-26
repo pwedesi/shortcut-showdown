@@ -11,7 +11,10 @@ import {
   type ReactNode,
 } from "react";
 import { getWebSocketFullUrl } from "@/lib/config";
-import { parseConnectPlayerId } from "@/lib/realtime/wsMessages";
+import {
+  parseConnectPlayerIdFromMessage,
+  tryParseJsonString,
+} from "@/lib/realtime/wsMessages";
 
 export type PlayerConnectionStatus =
   | "disconnected"
@@ -29,6 +32,10 @@ type Ctx = {
   playerId: string | null;
   lastError: string | null;
   reconnect: () => void;
+  /** Subscribe to every parsed JSON WS message (incl. `connect`). Unsubscribe on return. */
+  subscribeMessages: (cb: (data: unknown) => void) => () => void;
+  /** Best-effort send on the current socket; returns false if not open. */
+  sendWebSocketJson: (body: Record<string, unknown>) => boolean;
 };
 
 const PlayerConnectionContext = createContext<Ctx | null>(null);
@@ -50,6 +57,27 @@ export function PlayerConnectionProvider({ children }: { children: ReactNode }) 
   const connectFnRef = useRef<() => void>(() => {});
   const closedByUserRef = useRef(false);
   const unmountedRef = useRef(false);
+  const messageListenersRef = useRef(new Set<(data: unknown) => void>());
+
+  const subscribeMessages = useCallback((cb: (data: unknown) => void) => {
+    messageListenersRef.current.add(cb);
+    return () => {
+      messageListenersRef.current.delete(cb);
+    };
+  }, []);
+
+  const sendWebSocketJson = useCallback((body: Record<string, unknown>) => {
+    const s = wsRef.current;
+    if (!s || s.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    try {
+      s.send(JSON.stringify({ v: 1, ...body }));
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
 
   const clearSocket = useCallback(() => {
     if (wsRef.current) {
@@ -119,14 +147,22 @@ export function PlayerConnectionProvider({ children }: { children: ReactNode }) 
     };
 
     socket.onmessage = (ev: MessageEvent) => {
-      if (typeof ev.data !== "string") return;
-      const id = parseConnectPlayerId(ev.data);
-      if (id) {
-        setPlayerId(id);
-        setStatus("connected");
-        setLastError(null);
-        retryCountRef.current = 0;
-        attemptRef.current = 0;
+      if (typeof ev.data !== "string") {
+        return;
+      }
+      const data = tryParseJsonString(ev.data);
+      if (data !== null) {
+        const id = parseConnectPlayerIdFromMessage(data);
+        if (id) {
+          setPlayerId(id);
+          setStatus("connected");
+          setLastError(null);
+          retryCountRef.current = 0;
+          attemptRef.current = 0;
+        }
+        for (const listener of messageListenersRef.current) {
+          listener(data);
+        }
       }
     };
 
@@ -170,8 +206,15 @@ export function PlayerConnectionProvider({ children }: { children: ReactNode }) 
   }, [connect, clearSocket]);
 
   const value = useMemo<Ctx>(
-    () => ({ status, playerId, lastError, reconnect }),
-    [status, playerId, lastError, reconnect],
+    () => ({
+      status,
+      playerId,
+      lastError,
+      reconnect,
+      subscribeMessages,
+      sendWebSocketJson,
+    }),
+    [status, playerId, lastError, reconnect, subscribeMessages, sendWebSocketJson],
   );
 
   return (
@@ -187,4 +230,22 @@ export function usePlayerConnection(): Ctx {
     throw new Error("usePlayerConnection must be used within PlayerConnectionProvider");
   }
   return ctx;
+}
+
+/** Stable subscription to all JSON WebSocket messages (ref-safe handler). */
+export function useWebSocketMessageListener(
+  onMessage: (data: unknown) => void,
+): void {
+  const { subscribeMessages } = usePlayerConnection();
+  const onMessageRef = useRef(onMessage);
+
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
+
+  useEffect(() => {
+    return subscribeMessages((data) => {
+      onMessageRef.current(data);
+    });
+  }, [subscribeMessages]);
 }

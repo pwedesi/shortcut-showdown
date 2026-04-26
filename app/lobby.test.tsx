@@ -218,7 +218,52 @@ describe("Lobby page", () => {
     });
   });
 
-  it("navigates to gameplay when start returns room_id", async () => {
+  it("disables start for a guest when the host is another player", async () => {
+    searchParams = new URLSearchParams(`id=${LOBBY_ID}`);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo) => {
+        const u = String(input);
+        if (
+          u.startsWith("http://test.local/lobbies/") &&
+          u.includes(LOBBY_ID) &&
+          !u.match(/join|leave|start/)
+        ) {
+          return fetchLobbySuccess({
+            id: LOBBY_ID,
+            status: "waiting",
+            players: [
+              {
+                player_id: "p-host",
+                display_name: "HOST",
+                is_leader: true,
+              },
+              {
+                player_id: playerWsId,
+                display_name: "guest",
+                is_leader: false,
+              },
+            ],
+          });
+        }
+        return new Response("bad", { status: 500 });
+      }),
+    );
+    render(
+      <PlayerConnectionProvider>
+        <LobbyPage />
+      </PlayerConnectionProvider>,
+    );
+    const startBtn = await screen.findByRole("button", {
+      name: /initiate launch/i,
+    });
+    expect(startBtn).toBeDisabled();
+    expect(
+      await screen.findByText(/Only the room leader can start/i),
+    ).toBeInTheDocument();
+  });
+
+  it("navigates to gameplay when start returns game room id", async () => {
     searchParams = new URLSearchParams(`id=${LOBBY_ID}`);
     vi.stubGlobal(
       "fetch",
@@ -236,10 +281,32 @@ describe("Lobby page", () => {
           });
         }
         if (u.includes("/start")) {
-          return new Response(JSON.stringify({ room_id: "room-abc" }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({
+              id: "room-abc",
+              players: [playerWsId],
+              locked: true,
+              game_state: {
+                status: "running",
+                state_version: 1,
+                server_time: 0,
+                round_started_at: 0,
+                round_ends_at: 1,
+                objective_count: 0,
+                challenges: [],
+                players: {},
+                finished: false,
+                winner_player_id: null,
+                draw: false,
+                end_reason: null,
+                finished_at: null,
+              },
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
         }
         return new Response("bad", { status: 500 });
       }),

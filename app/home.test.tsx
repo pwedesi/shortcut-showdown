@@ -158,7 +158,7 @@ describe("Home join lobby", () => {
       expect(screen.getByText("Realtime connected")).toBeInTheDocument();
     });
     const joinWithCode = await showJoinWithCode(user);
-    const joinField = await screen.findByLabelText(/full lobby id/i);
+    const joinField = await screen.findByLabelText(/lobby id or code/i);
     await user.clear(joinField);
     await user.type(joinField, LOBBY_ID);
     await user.click(joinWithCode);
@@ -189,7 +189,22 @@ describe("Home negative paths", () => {
     vi.unstubAllGlobals();
   });
 
-  it("rejects a short id fragment with a specific message", async () => {
+  it("joins with a short lobby code when the API accepts it", async () => {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo) => {
+      const u = String(input);
+      if (u.includes("/join") && u.includes("96XKS9T")) {
+        return new Response(
+          JSON.stringify({
+            id: LOBBY_ID,
+            players: ["p-home"],
+            status: "waiting",
+            code: "96XKS9T",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
     const user = userEvent.setup();
     render(
       <PlayerConnectionProvider>
@@ -200,14 +215,13 @@ describe("Home negative paths", () => {
       expect(screen.getByText("Realtime connected")).toBeInTheDocument();
     });
     const joinWithCode = await showJoinWithCode(user);
-    const joinField = await screen.findByLabelText(/full lobby id/i);
+    const joinField = await screen.findByLabelText(/lobby id or code/i);
     await user.clear(joinField);
-    await user.type(joinField, "7DE6");
+    await user.type(joinField, "96XKS9T");
     await user.click(joinWithCode);
-    expect(replace).not.toHaveBeenCalled();
-    expect(
-      await screen.findByText(/full lobby id from the invite link/i),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalled();
+    });
   });
 
   it("maps join 404 to a friendly not-found string", async () => {
@@ -231,7 +245,7 @@ describe("Home negative paths", () => {
       expect(screen.getByText("Realtime connected")).toBeInTheDocument();
     });
     const joinWithCode = await showJoinWithCode(user);
-    const joinField = await screen.findByLabelText(/full lobby id/i);
+    const joinField = await screen.findByLabelText(/lobby id or code/i);
     await user.clear(joinField);
     await user.type(joinField, LOBBY_ID);
     await user.click(joinWithCode);
@@ -262,7 +276,7 @@ describe("Home negative paths", () => {
       expect(screen.getByText("Realtime connected")).toBeInTheDocument();
     });
     const joinWithCode = await showJoinWithCode(user);
-    const joinField = await screen.findByLabelText(/full lobby id/i);
+    const joinField = await screen.findByLabelText(/lobby id or code/i);
     await user.clear(joinField);
     await user.type(joinField, LOBBY_ID);
     await user.click(joinWithCode);

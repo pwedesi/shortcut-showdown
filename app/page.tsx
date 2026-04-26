@@ -9,11 +9,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { createLobby, joinLobby, ApiError } from "@/lib/api";
 import { formatApiErrorForUi } from "@/lib/api/errors";
-import {
-  DEFAULT_CALLSIGN,
-  loadCallsignFromStorage,
-  saveCallsignToStorage,
-} from "@/lib/callsign";
+import { loadCallsignFromStorage, saveCallsignToStorage } from "@/lib/callsign";
 import { getAppDisplayVersion } from "@/lib/config";
 import { buildLobbyPath, parseJoinLobbyInput } from "@/lib/lobbyQuery";
 import { usePlayerConnection } from "@/lib/realtime/playerConnection";
@@ -36,7 +32,7 @@ export default function Home() {
   const router = useRouter();
   const { status, playerId, lastError, reconnect } = usePlayerConnection();
 
-  const [callsign, setCallsign] = useState(DEFAULT_CALLSIGN);
+  const [callsign, setCallsign] = useState("");
   const [showJoin, setShowJoin] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -98,11 +94,6 @@ export default function Home() {
       setBusy(null);
     }
   }, [playerId, joinCode, router, callsign]);
-
-  const onQuickPlay = useCallback(() => {
-    saveCallsignToStorage(callsign);
-    router.push("/gameplay");
-  }, [router, callsign]);
 
   const conn = connectionLabel(status);
   const appVersion = getAppDisplayVersion();
@@ -183,12 +174,12 @@ export default function Home() {
                 className="text-xs font-medium tracking-[0.2em] text-[#e2bfb0] uppercase"
                 htmlFor="join-code"
               >
-                Full lobby id
+                Lobby id or code
               </label>
               <input
                 id="join-code"
                 className="w-full rounded-sm border border-[color-mix(in_srgb,#e5e2e1_12%,transparent)] bg-[#0e0e0e] py-3 px-4 font-mono text-sm text-[#e5e2e1] outline-none focus:border-[color-mix(in_srgb,#ff6d00_45%,transparent)]"
-                placeholder="paste-uuid-from-invite-link"
+                placeholder="Same value as on the lobby screen"
                 spellCheck={false}
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
@@ -199,12 +190,13 @@ export default function Home() {
           <div className="mt-8 flex flex-col gap-4">
             <button
               type="button"
-              onClick={onQuickPlay}
-              className="relative w-full overflow-hidden rounded-sm bg-linear-to-b from-[#ff9500] via-[#ff7b00] to-[#e85d00] py-4 font-sans text-lg font-bold tracking-[0.12em] text-[#341100] uppercase shadow-[0_0_0_1px_color-mix(in_srgb,#fff_12%,transparent)_inset] transition-[transform,box-shadow] duration-200 hover:shadow-[0_0_32px_color-mix(in_srgb,#ff6d00_45%,transparent),inset_0_0_24px_color-mix(in_srgb,#fff_18%,transparent)] active:scale-[0.99] disabled:opacity-50"
+              disabled
+              title="Start a match from a lobby when the host launches the game."
+              className="relative w-full cursor-not-allowed overflow-hidden rounded-sm bg-linear-to-b from-[#ff9500] via-[#ff7b00] to-[#e85d00] py-4 font-sans text-lg font-bold tracking-[0.12em] text-[#341100] uppercase shadow-[0_0_0_1px_color-mix(in_srgb,#fff_12%,transparent)_inset] opacity-50"
             >
               <span className="flex items-center justify-center gap-2">
                 <IconPlayerPlayFilled className="size-6" aria-hidden />
-                Quick Play (local)
+                Quick Play (use lobby)
               </span>
             </button>
 

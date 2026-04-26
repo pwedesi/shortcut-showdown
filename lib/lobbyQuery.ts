@@ -3,12 +3,16 @@
  * `code` may mirror share code when API returns a short code in `Lobby.code`.
  */
 
-/** `POST /lobbies/{id}/join` uses the server lobby id (UUID in current API). */
+/** Standard UUID lobby id (hyphenated). */
 const LOBBY_ID_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const JOIN_LOBBY_REF_MAX = 64;
+
 /**
- * Reject join attempts that use a few characters of the uuid (e.g. "7DE6") — those are not valid ids.
+ * Parse the value users type on the home screen. The lobby UI shows the same
+ * string the API accepts: either a hyphenated UUID or a short share code
+ * (e.g. `96XKS9T`) from `Lobby.code`.
  */
 export function parseJoinLobbyInput(
   raw: string,
@@ -19,16 +23,26 @@ export function parseJoinLobbyInput(
   if (!id) {
     return {
       ok: false,
-      message: "Paste the full lobby id from the invite link.",
+      message:
+        "Enter the lobby id or access code shown on the host's lobby screen.",
+    };
+  }
+  if (id.length > JOIN_LOBBY_REF_MAX) {
+    return {
+      ok: false,
+      message: "That value is too long. Copy it exactly from the lobby screen.",
     };
   }
   if (LOBBY_ID_UUID.test(id)) {
     return { ok: true, id };
   }
+  if (/^[A-Za-z0-9_-]+$/.test(id)) {
+    return { ok: true, id };
+  }
   return {
     ok: false,
     message:
-      "Use the full lobby id from the invite link or open the link directly. A short label is not the server id.",
+      "Use only letters, numbers, hyphens, and underscores — same as in the lobby.",
   };
 }
 

@@ -36,7 +36,11 @@ describe("lobby API client", () => {
       }),
     );
     const out = await createLobby({ player_id: "p1" });
-    expect(out).toEqual(lobbyJson);
+    expect(out).toEqual({
+      id: LOBBY_ID,
+      players: [{ player_id: "p1" }],
+      status: "waiting",
+    });
     expect(fetch).toHaveBeenCalledWith(
       `${API}/lobbies`,
       expect.objectContaining({
@@ -44,6 +48,24 @@ describe("lobby API client", () => {
         body: JSON.stringify({ player_id: "p1" }),
       }),
     );
+  });
+
+  it("createLobby normalizes object-shaped players from API", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: LOBBY_ID,
+          players: [{ player_id: "p1" }],
+          status: "waiting",
+        }),
+        {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+    const out = await createLobby({ player_id: "p1" });
+    expect(out.players).toEqual([{ player_id: "p1" }]);
   });
 
   it("joinLobby posts to encoded path", async () => {
@@ -81,15 +103,34 @@ describe("lobby API client", () => {
     );
   });
 
-  it("startLobby returns room fields from JSON", async () => {
+  it("startLobby returns game room id in `id` (GameRoomView)", async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(
-        JSON.stringify({ room_id: "room-99", other: 1 }),
+        JSON.stringify({
+          id: "room-99",
+          players: ["p1"],
+          locked: true,
+          game_state: {
+            status: "running",
+            state_version: 1,
+            server_time: 0,
+            round_started_at: 0,
+            round_ends_at: 1,
+            objective_count: 0,
+            challenges: [],
+            players: {},
+            finished: false,
+            winner_player_id: null,
+            draw: false,
+            end_reason: null,
+            finished_at: null,
+          },
+        }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     );
     const res = await startLobby(LOBBY_ID, { player_id: "p1" });
-    expect(res.room_id).toBe("room-99");
+    expect(res.id).toBe("room-99");
     expect(fetch).toHaveBeenCalledWith(
       `${API}/lobbies/${encodeURIComponent(LOBBY_ID)}/start`,
       expect.objectContaining({ method: "POST" }),
@@ -109,7 +150,11 @@ describe("lobby API client", () => {
       }),
     );
     const out = await getLobby(LOBBY_ID);
-    expect(out).toEqual(lobbyJson);
+    expect(out).toEqual({
+      id: LOBBY_ID,
+      players: [{ player_id: "p1" }],
+      status: "waiting",
+    });
     expect(fetch).toHaveBeenCalledWith(
       `${API}/lobbies/${encodeURIComponent(LOBBY_ID)}`,
       expect.objectContaining({ method: "GET" }),
