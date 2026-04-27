@@ -99,6 +99,9 @@ describe("Lobby page", () => {
         "fetch",
         vi.fn(async (input: RequestInfo) => {
           const u = String(input);
+          if (u.includes("/players/")) {
+            return fetchLobbySuccess({ player_id: playerWsId, display_name: "test" });
+          }
           if (
             u.startsWith("http://test.local/lobbies/") &&
             u.includes(LOBBY_ID) &&
@@ -148,6 +151,9 @@ describe("Lobby page", () => {
       "fetch",
       vi.fn(async (input: RequestInfo) => {
         const u = String(input);
+        if (u.includes("/players/")) {
+          return fetchLobbySuccess({ player_id: playerWsId, display_name: "test" });
+        }
         if (u.includes("/lobbies/") && !u.match(/join|leave|start/)) {
           return new Response(JSON.stringify({ detail: "nope" }), {
             status: 404,
@@ -189,6 +195,9 @@ describe("Lobby page", () => {
       "fetch",
       vi.fn(async (input: RequestInfo) => {
         const u = String(input);
+        if (u.includes("/players/")) {
+          return fetchLobbySuccess({ player_id: playerWsId, display_name: "test" });
+        }
         if (
           u.startsWith("http://test.local/lobbies/") &&
           u.includes(LOBBY_ID) &&
@@ -219,12 +228,15 @@ describe("Lobby page", () => {
     });
   });
 
-  it("disables start for a guest when the host is another player", async () => {
+  it("shows ready action slot for a guest when the host is another player", async () => {
     searchParams = new URLSearchParams(`id=${LOBBY_ID}`);
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo) => {
         const u = String(input);
+        if (u.includes("/players/")) {
+          return fetchLobbySuccess({ player_id: playerWsId, display_name: "test" });
+        }
         if (
           u.startsWith("http://test.local/lobbies/") &&
           u.includes(LOBBY_ID) &&
@@ -255,12 +267,68 @@ describe("Lobby page", () => {
         <LobbyPage />
       </PlayerConnectionProvider>,
     );
+    const readyBtn = await screen.findByRole("button", {
+      name: /mark ready/i,
+    });
+    expect(readyBtn).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Mark ready when you are set/i),
+    ).toBeInTheDocument();
+  });
+
+  it("disables host start when a non-leader is not ready", async () => {
+    searchParams = new URLSearchParams(`id=${LOBBY_ID}`);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo) => {
+        const u = String(input);
+        if (u.includes("/players/")) {
+          return fetchLobbySuccess({
+            player_id: playerWsId,
+            display_name: "HOST",
+            is_ready: false,
+          });
+        }
+        if (
+          u.startsWith("http://test.local/lobbies/") &&
+          u.includes(LOBBY_ID) &&
+          !u.match(/join|leave|start/)
+        ) {
+          return fetchLobbySuccess({
+            id: LOBBY_ID,
+            status: "waiting",
+            players: [
+              {
+                player_id: playerWsId,
+                display_name: "HOST",
+                is_leader: true,
+                is_ready: false,
+              },
+              {
+                player_id: "p-guest",
+                display_name: "GUEST",
+                is_leader: false,
+                is_ready: false,
+              },
+            ],
+          });
+        }
+        return new Response("bad", { status: 500 });
+      }),
+    );
+
+    render(
+      <PlayerConnectionProvider>
+        <LobbyPage />
+      </PlayerConnectionProvider>,
+    );
+
     const startBtn = await screen.findByRole("button", {
       name: /initiate launch/i,
     });
     expect(startBtn).toBeDisabled();
     expect(
-      await screen.findByText(/Only the room leader can start/i),
+      await screen.findByText(/Waiting for all non-leader players to mark ready/i),
     ).toBeInTheDocument();
   });
 
@@ -271,6 +339,9 @@ describe("Lobby page", () => {
       "fetch",
       vi.fn(async (input: RequestInfo) => {
         const u = String(input);
+        if (u.includes("/players/")) {
+          return fetchLobbySuccess({ player_id: playerWsId, display_name: "test" });
+        }
         if (
           u.startsWith("http://test.local/lobbies/") &&
           u.includes(LOBBY_ID) &&
@@ -327,6 +398,9 @@ describe("Lobby page", () => {
       "fetch",
       vi.fn(async (input: RequestInfo) => {
         const u = String(input);
+        if (u.includes("/players/")) {
+          return fetchLobbySuccess({ player_id: playerWsId, display_name: "test" });
+        }
         if (
           u.startsWith("http://test.local/lobbies/") &&
           u.includes(LOBBY_ID) &&
@@ -394,6 +468,9 @@ describe("Lobby page", () => {
       "fetch",
       vi.fn(async (input: RequestInfo) => {
         const u = String(input);
+        if (u.includes("/players/")) {
+          return fetchLobbySuccess({ player_id: playerWsId, display_name: "test" });
+        }
         if (
           u.startsWith("http://test.local/lobbies/") &&
           u.includes(LOBBY_ID) &&
@@ -460,6 +537,9 @@ describe("Lobby page", () => {
       "fetch",
       vi.fn(async (input: RequestInfo) => {
         const u = String(input);
+        if (u.includes("/players/")) {
+          return fetchLobbySuccess({ player_id: playerWsId, display_name: "test" });
+        }
         if (
           u.startsWith("http://test.local/lobbies/") &&
           u.includes(LOBBY_ID) &&

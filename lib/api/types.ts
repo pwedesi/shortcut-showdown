@@ -37,6 +37,8 @@ export type LobbyRosterPlayer = {
   display_name?: string;
   /** When true, this player may start the match (from API roster). */
   is_leader?: boolean;
+  /** When true, this player has marked themselves as ready. */
+  is_ready?: boolean;
 };
 
 /** Server lobby shape (minimal contract for Phase 1). */

@@ -28,6 +28,8 @@ import {
   joinLobby,
   leaveLobby,
   startLobby,
+  updatePlayerDisplayName,
+  updatePlayerReadyStatus,
   type Lobby,
 } from "@/lib/api";
 import { formatApiErrorForUi } from "@/lib/api/errors";
@@ -182,6 +184,7 @@ function LobbyClient() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [startBusy, setStartBusy] = useState(false);
   const [leaveBusy, setLeaveBusy] = useState(false);
+  const [readyBusy, setReadyBusy] = useState(false);
   const [lastPoll, setLastPoll] = useState(0);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -202,6 +205,31 @@ function LobbyClient() {
   useEffect(() => {
     setCallsign(loadCallsignFromStorage());
   }, []);
+
+  /**
+   * Send the player's callsign to the backend whenever they have a player ID.
+   * This ensures other players see the player's display name instead of just their ID.
+   */
+  useEffect(() => {
+    if (!playerId || !callsign.trim()) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        await updatePlayerDisplayName(playerId, callsign.trim());
+      } catch (e) {
+        // Silently fail; this is best-effort. Connection/validation errors
+        // won't prevent the player from participating.
+        if (!cancelled) {
+          console.debug("Failed to update player display name:", e);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [playerId, callsign]);
 
   const copyLink = useCallback(async () => {
     if (!lobbyId) return;
@@ -351,6 +379,14 @@ function LobbyClient() {
       setActionError("Only the room leader can start the match.");
       return;
     }
+    const leader = getLobbyLeaderPlayerId(lobby);
+    const waitingPeer = lobby.players.some(
+      (p) => p.player_id !== leader && p.is_ready !== true,
+    );
+    if (waitingPeer) {
+      setActionError("All non-leader players must be ready before starting.");
+      return;
+    }
     setActionError(null);
     setStartBusy(true);
     try {
@@ -389,6 +425,44 @@ function LobbyClient() {
     }
   }, [lobbyId, playerId, router]);
 
+  const onToggleReady = useCallback(async () => {
+    if (!playerId) {
+      setActionError("Waiting for player id from realtime connection.");
+      return;
+    }
+    const currentPlayer = lobby?.players.find((p) => p.player_id === playerId);
+    const nextReady = !currentPlayer?.is_ready;
+    setActionError(null);
+    // Optimistic update so the button/row reacts immediately.
+    setLobby((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        players: prev.players.map((p) =>
+          p.player_id === playerId
+            ? { ...p, is_ready: nextReady }
+            : p,
+        ),
+      };
+    });
+    setReadyBusy(true);
+    try {
+      await updatePlayerReadyStatus(playerId, nextReady);
+      // Refresh lobby to get updated status
+      if (lobbyIdParam) {
+        await refresh();
+      }
+    } catch (e) {
+      setActionError(formatApiErrorForUi(e));
+      // Roll forward from server truth after an API failure.
+      if (lobbyIdParam) {
+        await refresh();
+      }
+    } finally {
+      setReadyBusy(false);
+    }
+  }, [playerId, lobby, lobbyIdParam, refresh]);
+
   if (!lobbyIdParam) {
     return (
       <LobbyShell
@@ -425,6 +499,12 @@ function LobbyClient() {
   const isRoomLeader = Boolean(
     playerId && leaderId && playerId === leaderId,
   );
+  const nonLeaderPlayers = (lobby?.players ?? []).filter(
+    (p) => p.player_id !== leaderId,
+  );
+  const allNonLeadersReady = nonLeaderPlayers.every((p) => p.is_ready === true);
+  const myRosterEntry = (lobby?.players ?? []).find((p) => p.player_id === playerId);
+  const isMeReady = Boolean(myRosterEntry?.is_ready);
   const access = getLobbyAccessDisplay(lobby, lobbyIdParam);
   const accessHeroIsLong = access.length > 12;
   const accessLabel = hasServerShareCode(lobby) ? "ACCESS CODE" : "LOBBY ID";
@@ -662,7 +742,7 @@ function LobbyClient() {
                         name={name}
                         highlight={isYou}
                         isRoomLeader={isLead}
-                        status={isYou ? "ready" : "waiting"}
+                        isReady={p.is_ready ?? false}
                       />
                     );
                   })}
@@ -687,39 +767,70 @@ function LobbyClient() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={onStart}
-              disabled={startBusy || !playerId || !isRoomLeader}
-              className={cn(
-                "group relative flex h-18 w-full items-center justify-center gap-3 overflow-hidden rounded-sm transition-all duration-300 md:h-20 md:gap-4",
-                "bg-linear-to-r from-[#ff7700] via-[#ff9f4a] to-[#ffc49a]",
-                "text-[#3d1800]",
-                "shadow-[0_0_0_1px_rgba(255,200,150,0.25)_inset,0_8px_40px_rgba(255,120,0,0.35),0_0_60px_rgba(255,140,0,0.2)]",
-                "hover:shadow-[0_0_0_1px_rgba(255,220,190,0.35)_inset,0_12px_48px_rgba(255,120,0,0.45),0_0_80px_rgba(255,160,80,0.25)]",
-                "active:scale-[0.99]",
-                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
-                "disabled:opacity-50",
-              )}
-            >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-0 bg-linear-to-t from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
-              />
-              <IconPlayerPlayFilled className="relative size-8 shrink-0 md:size-9" />
-              <span className="relative font-sans text-xl font-black uppercase tracking-[0.18em] md:text-2xl">
-                {startBusy ? "STARTING…" : "INITIATE LAUNCH"}
-              </span>
-            </button>
+            {isRoomLeader ? (
+              <button
+                type="button"
+                onClick={onStart}
+                disabled={startBusy || !playerId || !allNonLeadersReady}
+                className={cn(
+                  "group relative flex h-18 w-full items-center justify-center gap-3 overflow-hidden rounded-sm transition-all duration-300 md:h-20 md:gap-4",
+                  "bg-linear-to-r from-[#ff7700] via-[#ff9f4a] to-[#ffc49a]",
+                  "text-[#3d1800]",
+                  "shadow-[0_0_0_1px_rgba(255,200,150,0.25)_inset,0_8px_40px_rgba(255,120,0,0.35),0_0_60px_rgba(255,140,0,0.2)]",
+                  "hover:shadow-[0_0_0_1px_rgba(255,220,190,0.35)_inset,0_12px_48px_rgba(255,120,0,0.45),0_0_80px_rgba(255,160,80,0.25)]",
+                  "active:scale-[0.99]",
+                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
+                  "disabled:opacity-50",
+                )}
+              >
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 bg-linear-to-t from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
+                />
+                <IconPlayerPlayFilled className="relative size-8 shrink-0 md:size-9" />
+                <span className="relative font-sans text-xl font-black uppercase tracking-[0.18em] md:text-2xl">
+                  {startBusy ? "STARTING…" : "INITIATE LAUNCH"}
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onToggleReady}
+                disabled={readyBusy || !playerId}
+                className={cn(
+                  "group relative flex h-18 w-full items-center justify-center gap-3 overflow-hidden rounded-sm transition-all duration-300 md:h-20 md:gap-4",
+                  isMeReady
+                    ? "bg-linear-to-r from-[#ff7700] via-[#ff9f4a] to-[#ffc49a] text-[#3d1800]"
+                    : "border border-white/10 bg-[#252525] text-[#e8e6e4]",
+                  "active:scale-[0.99]",
+                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
+                  "disabled:opacity-50",
+                )}
+              >
+                {isMeReady ? (
+                  <IconCheck className="relative size-8 shrink-0 md:size-9" />
+                ) : (
+                  <IconClock className="relative size-8 shrink-0 md:size-9" />
+                )}
+                <span className="relative font-sans text-xl font-black uppercase tracking-[0.18em] md:text-2xl">
+                  {readyBusy ? "UPDATING…" : isMeReady ? "READY" : "MARK READY"}
+                </span>
+              </button>
+            )}
             {!playerId && (
               <p className="text-center text-xs text-[#c45c4a]/90">
                 Waiting for player id from the server. Check realtime connection
                 and Retry on the home screen.
               </p>
             )}
+            {playerId && lobby && isRoomLeader && !allNonLeadersReady && (
+              <p className="text-center text-xs text-[#888888]">
+                Waiting for all non-leader players to mark ready.
+              </p>
+            )}
             {playerId && lobby && !isRoomLeader && (
               <p className="text-center text-xs text-[#888888]">
-                Only the room leader can start. Wait for the host to launch.
+                Mark ready when you are set. Host can launch once everyone is ready.
               </p>
             )}
           </div>
@@ -801,15 +912,15 @@ function ParamCell({ label, value }: { label: string; value: string }) {
 function PlayerRow({
   slot,
   name,
-  status,
   highlight,
   isRoomLeader,
+  isReady,
 }: {
   slot: string;
   name: string;
-  status: "ready" | "waiting";
   highlight?: boolean;
   isRoomLeader?: boolean;
+  isReady: boolean;
 }) {
   const subtitle = isRoomLeader
     ? highlight
@@ -853,7 +964,7 @@ function PlayerRow({
           </span>
         </div>
       </div>
-      {status === "ready" ? (
+      {isReady ? (
         <div
           className={cn(
             "z-10 flex shrink-0 items-center gap-2 rounded-sm px-3 py-2 md:px-4",

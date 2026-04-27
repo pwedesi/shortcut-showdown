@@ -2,9 +2,25 @@
  * Build `keys` list for `POST /game-rooms/.../attempts` from a key event.
  * Maps Meta (Cmd) to `ctrl` so Mac input matches the server dataset.
  */
+function canonicalKeyToken(value: string): string {
+  const token = String(value).trim().toLowerCase();
+  if (!token) return token;
+  const map: Record<string, string> = {
+    cmd: "ctrl",
+    command: "ctrl",
+    meta: "ctrl",
+    control: "ctrl",
+    del: "delete",
+    numpadenter: "enter",
+    return: "enter",
+    shiftleft: "shift",
+    shiftright: "shift",
+  };
+  return map[token] ?? token;
+}
+
 export function keysFromKeyboardEvent(event: KeyboardEvent): string[] {
-  const raw = event.key;
-  const k = raw.length === 1 ? raw.toLowerCase() : raw.toLowerCase();
+  const k = canonicalKeyToken(event.key);
 
   if (!event.ctrlKey && !event.metaKey && !event.altKey) {
     if (k === "f11") {
@@ -23,29 +39,28 @@ export function keysFromKeyboardEvent(event: KeyboardEvent): string[] {
     parts.push("ctrl");
   }
 
+  const out = [...parts];
   if (k.length === 1) {
-    return [...parts, k];
+    if (!out.includes(k)) out.push(k);
+    return out;
   }
 
   if (k === "f11" || k === "f4" || /^f\d{1,2}$/.test(k)) {
-    return [...parts, k];
+    if (!out.includes(k)) out.push(k);
+    return out;
   }
 
-  return [...parts, k];
+  if (!out.includes(k)) out.push(k);
+  return out;
 }
 
 /** Map a typed shortcut (e.g. "Ctrl + C", "meta+f4") to API key tokens. */
 export function keysFromTextEntry(entered: string): string[] {
-  const t = entered
+  const parts = entered
     .toLowerCase()
-    .replace(/\bcommand\b/g, "meta")
-    .replace(/\bcontrol\b/g, "ctrl");
-  const parts = t
     .split(/[+\s]+/)
     .map((s) => s.trim())
     .filter(Boolean)
-    .map((p) =>
-      p === "cmd" || p === "meta" ? "ctrl" : p,
-    );
-  return parts;
+    .map(canonicalKeyToken);
+  return Array.from(new Set(parts));
 }

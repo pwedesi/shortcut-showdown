@@ -12,6 +12,7 @@ export {
   getMatchResults,
   submitGameAttempt,
 } from "@/lib/api/gameRooms";
+export { updatePlayerDisplayName, updatePlayerReadyStatus } from "@/lib/api/players";
 export { ApiError, type ApiErrorCode } from "@/lib/api/types";
 export type {
   AttemptRequest,
