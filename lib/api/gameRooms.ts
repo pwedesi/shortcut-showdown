@@ -1,5 +1,11 @@
 import { apiRequest } from "@/lib/api/client";
-import type { AttemptRequest, AttemptResponse, GameRoomView } from "@/lib/api/types";
+import type {
+  AttemptRequest,
+  AttemptResponse,
+  GameRoomView,
+  MatchResultsView,
+  RematchResponse,
+} from "@/lib/api/types";
 
 function encodeSegment(id: string): string {
   return encodeURIComponent(id);
@@ -24,6 +30,41 @@ export function submitGameAttempt(
 ): Promise<AttemptResponse> {
   return apiRequest<AttemptResponse>(
     `/game-rooms/${encodeSegment(roomId)}/attempts`,
+    {
+      method: "POST",
+      body,
+      signal: options?.signal,
+    },
+  );
+}
+
+/** GET /game-rooms/{room_id}/results */
+export function getMatchResults(
+  roomId: string,
+  options?: { viewerPlayerId?: string | null; signal?: AbortSignal },
+): Promise<MatchResultsView> {
+  const q = new URLSearchParams();
+  if (options?.viewerPlayerId) {
+    q.set("player_id", options.viewerPlayerId);
+  }
+  const qs = q.toString();
+  const path = `/game-rooms/${encodeSegment(roomId)}/results${
+    qs ? `?${qs}` : ""
+  }`;
+  return apiRequest<MatchResultsView>(path, {
+    method: "GET",
+    signal: options?.signal,
+  });
+}
+
+/** POST /game-rooms/{room_id}/rematch */
+export function createRematch(
+  roomId: string,
+  body: { player_id: string },
+  options?: { signal?: AbortSignal },
+): Promise<RematchResponse> {
+  return apiRequest<RematchResponse>(
+    `/game-rooms/${encodeSegment(roomId)}/rematch`,
     {
       method: "POST",
       body,

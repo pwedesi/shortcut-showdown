@@ -134,3 +134,38 @@ export type AttemptResponse = {
   state_version: number;
   game_state: GameStateView;
 };
+
+/** Serialized `GameEndReason` from the API. */
+export type GameEndReason = "time" | "goal" | "forfeit" | string;
+
+/** One row on the match podium (`GET /game-rooms/{id}/results`). */
+export type MatchPlacementView = {
+  player_id: string;
+  display_name: string;
+  place: number;
+  objective_index: number;
+  progress_percent: number;
+  wpm: number;
+  accuracy: number;
+  streak: number;
+  attempts_total: number;
+  attempts_correct: number;
+  finished: boolean;
+  finished_at: number | null;
+};
+
+export type MatchResultsView = {
+  room_id: string;
+  you_player_id: string | null;
+  placements: MatchPlacementView[];
+  winner_player_id: string | null;
+  draw: boolean;
+  end_reason: GameEndReason | null;
+  ended_at: number | null;
+  finished: boolean;
+};
+
+export type RematchResponse = {
+  room_id: string;
+  next_lobby_id: string;
+};

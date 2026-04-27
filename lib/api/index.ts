@@ -6,7 +6,12 @@ export {
   leaveLobby,
   startLobby,
 } from "@/lib/api/lobbies";
-export { getGameRoom, submitGameAttempt } from "@/lib/api/gameRooms";
+export {
+  createRematch,
+  getGameRoom,
+  getMatchResults,
+  submitGameAttempt,
+} from "@/lib/api/gameRooms";
 export { ApiError, type ApiErrorCode } from "@/lib/api/types";
 export type {
   AttemptRequest,
@@ -16,6 +21,9 @@ export type {
   Lobby,
   LobbyRosterPlayer,
   LobbyStatus,
+  MatchPlacementView,
+  MatchResultsView,
   PublicChallenge,
+  RematchResponse,
   StartLobbyResponse,
 } from "@/lib/api/types";
