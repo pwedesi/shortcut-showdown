@@ -124,7 +124,7 @@ describe("GameplayClient", () => {
     });
   });
 
-  it("posts attempt with ctrl+c keys", async () => {
+  it("captures pressed keys and posts attempt on Enter", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async (input: RequestInfo, init?: RequestInit) => {
       const u = String(input);
@@ -175,6 +175,14 @@ describe("GameplayClient", () => {
     const input = screen.getByLabelText(/Type the shortcut/i);
     input.focus();
     await user.keyboard("{Control>}c{/Control}");
+    await waitFor(() => {
+      expect((input as HTMLInputElement).value).toBe("CTRL + C");
+    });
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/attempts"),
+      expect.anything(),
+    );
+    await user.keyboard("{Enter}");
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining("/attempts"),

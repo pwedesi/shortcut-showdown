@@ -11,6 +11,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import { keysFromKeyboardEvent } from "@/lib/gameplay/keysFromKeyboard";
 import { useGameplaySession } from "@/lib/gameplay/useGameplaySession";
 import { usePlayerConnection } from "@/lib/realtime/playerConnection";
 
@@ -36,6 +37,10 @@ function trapsBrowserShortcut(event: {
     event.altKey ||
     /^f\d{1,2}$/i.test(event.key)
   );
+}
+
+function displayKeys(keys: string[]): string {
+  return keys.map((k) => k.toUpperCase()).join(" + ");
 }
 
 export function GameplayClient() {
@@ -69,6 +74,7 @@ export function GameplayClient() {
   });
 
   const [entry, setEntry] = useState("");
+  const [capturedKeys, setCapturedKeys] = useState<string[]>([]);
   const [feedback, setFeedback] = useState<"idle" | "success" | "error">(
     "idle",
   );
@@ -145,13 +151,20 @@ export function GameplayClient() {
     if (session.gameState?.finished) {
       return;
     }
+
+    if (trapsBrowserShortcut(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
     if (event.key === "Enter") {
       event.preventDefault();
-      if (!entry.trim()) {
+      if (capturedKeys.length < 1) {
         return;
       }
-      const r = await session.trySubmitText(entry);
+      const r = await session.trySubmitText(capturedKeys.join("+"));
       setEntry("");
+      setCapturedKeys([]);
       if (r.ok && !r.message) {
         setTransientFeedback("success");
       } else {
@@ -159,18 +172,15 @@ export function GameplayClient() {
       }
       return;
     }
-    if (trapsBrowserShortcut(event)) {
-      event.preventDefault();
-      event.stopPropagation();
+
+    const keys = keysFromKeyboardEvent(
+      event as unknown as globalThis.KeyboardEvent,
+    );
+    if (keys.length < 1) {
+      return;
     }
-    const r = await session.trySubmitKeys(event);
-    if (r) {
-      if (r.ok && !r.message) {
-        setTransientFeedback("success");
-      } else if (r.message) {
-        setTransientFeedback("error");
-      }
-    }
+    setCapturedKeys(keys);
+    setEntry(displayKeys(keys));
   }
 
   const lanes = useMemo(() => {
@@ -390,11 +400,11 @@ export function GameplayClient() {
                 placeholder={
                   finished
                     ? "Round complete"
-                    : "Ctrl/Cmd + key, or type shortcut + Enter"
+                    : "Press shortcut keys, then Enter"
                 }
+                readOnly
                 spellCheck={false}
                 value={entry}
-                onChange={(e) => setEntry(e.target.value)}
                 onKeyDown={(e) => {
                   void handleInputKeyDown(e);
                 }}

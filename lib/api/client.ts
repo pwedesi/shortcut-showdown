@@ -9,7 +9,7 @@ function statusToCode(status: number): ApiErrorCode {
 }
 
 export type RequestOptions = {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   signal?: AbortSignal;
 };
