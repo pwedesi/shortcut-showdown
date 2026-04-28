@@ -4,6 +4,7 @@ import type {
   AttemptResponse,
   GameRoomView,
   MatchResultsView,
+  RematchAcceptanceResponse,
   RematchResponse,
 } from "@/lib/api/types";
 
@@ -65,6 +66,38 @@ export function createRematch(
 ): Promise<RematchResponse> {
   return apiRequest<RematchResponse>(
     `/game-rooms/${encodeSegment(roomId)}/rematch`,
+    {
+      method: "POST",
+      body,
+      signal: options?.signal,
+    },
+  );
+}
+
+/** POST /game-rooms/{room_id}/rematch/accept */
+export function acceptRematch(
+  roomId: string,
+  body: { player_id: string },
+  options?: { signal?: AbortSignal },
+): Promise<RematchAcceptanceResponse> {
+  return apiRequest<RematchAcceptanceResponse>(
+    `/game-rooms/${encodeSegment(roomId)}/rematch/accept`,
+    {
+      method: "POST",
+      body,
+      signal: options?.signal,
+    },
+  );
+}
+
+/** POST /game-rooms/{room_id}/rematch/decline */
+export function declineRematch(
+  roomId: string,
+  body: { player_id: string },
+  options?: { signal?: AbortSignal },
+): Promise<RematchAcceptanceResponse> {
+  return apiRequest<RematchAcceptanceResponse>(
+    `/game-rooms/${encodeSegment(roomId)}/rematch/decline`,
     {
       method: "POST",
       body,
