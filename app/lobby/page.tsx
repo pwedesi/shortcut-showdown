@@ -8,11 +8,15 @@ import {
   IconFlame,
   IconLayoutGrid,
   IconPlayerPlayFilled,
+  IconMinus,
   IconPlus,
   IconSettings,
   IconAdjustments,
   IconUser,
   IconUsersGroup,
+  IconLock,
+  IconLockOpen,
+  IconPlayerPlay,
 } from "@tabler/icons-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -27,21 +31,29 @@ import {
   getLobby,
   joinLobby,
   leaveLobby,
+  lockLobby,
+  quickPlay,
+  setChallengeCount,
+  setMaxPlayers,
+  setRoundDuration,
   startLobby,
+  unlockLobby,
+  updatePlayerDisplayName,
+  updatePlayerReadyStatus,
   type Lobby,
 } from "@/lib/api";
 import { formatApiErrorForUi } from "@/lib/api/errors";
 import { loadCallsignFromStorage } from "@/lib/callsign";
+import { copyTextToClipboard } from "@/lib/browser";
 import {
   getLobbyAccessDisplay,
+  getLobbyIdFromSearchParams,
   getLobbyLeaderPlayerId,
   getLobbyMaxPlayers,
   hasServerShareCode,
+  lobbyHasPlayer,
   shortPlayerId,
-} from "@/lib/lobbyDisplay";
-import { copyTextToClipboard } from "@/lib/copyToClipboard";
-import { getLobbyIdFromSearchParams } from "@/lib/lobbyQuery";
-import { lobbyHasPlayer } from "@/lib/lobbyPlayers";
+} from "@/lib/lobby";
 import {
   usePlayerConnection,
   useWebSocketMessageListener,
@@ -182,6 +194,9 @@ function LobbyClient() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [startBusy, setStartBusy] = useState(false);
   const [leaveBusy, setLeaveBusy] = useState(false);
+  const [readyBusy, setReadyBusy] = useState(false);
+  const [lockBusy, setLockBusy] = useState(false);
+  const [quickPlayBusy, setQuickPlayBusy] = useState(false);
   const [lastPoll, setLastPoll] = useState(0);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -202,6 +217,31 @@ function LobbyClient() {
   useEffect(() => {
     setCallsign(loadCallsignFromStorage());
   }, []);
+
+  /**
+   * Send the player's callsign to the backend whenever they have a player ID.
+   * This ensures other players see the player's display name instead of just their ID.
+   */
+  useEffect(() => {
+    if (!playerId || !callsign.trim()) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        await updatePlayerDisplayName(playerId, callsign.trim());
+      } catch (e) {
+        // Silently fail; this is best-effort. Connection/validation errors
+        // won't prevent the player from participating.
+        if (!cancelled) {
+          console.debug("Failed to update player display name:", e);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [playerId, callsign]);
 
   const copyLink = useCallback(async () => {
     if (!lobbyId) return;
@@ -351,6 +391,14 @@ function LobbyClient() {
       setActionError("Only the room leader can start the match.");
       return;
     }
+    const leader = getLobbyLeaderPlayerId(lobby);
+    const waitingPeer = lobby.players.some(
+      (p) => p.player_id !== leader && p.is_ready !== true,
+    );
+    if (waitingPeer) {
+      setActionError("All non-leader players must be ready before starting.");
+      return;
+    }
     setActionError(null);
     setStartBusy(true);
     try {
@@ -389,6 +437,152 @@ function LobbyClient() {
     }
   }, [lobbyId, playerId, router]);
 
+  const onToggleReady = useCallback(async () => {
+    if (!playerId) {
+      setActionError("Waiting for player id from realtime connection.");
+      return;
+    }
+    const currentPlayer = lobby?.players.find((p) => p.player_id === playerId);
+    const nextReady = !currentPlayer?.is_ready;
+    setActionError(null);
+    // Optimistic update so the button/row reacts immediately.
+    setLobby((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        players: prev.players.map((p) =>
+          p.player_id === playerId
+            ? { ...p, is_ready: nextReady }
+            : p,
+        ),
+      };
+    });
+    setReadyBusy(true);
+    try {
+      await updatePlayerReadyStatus(playerId, nextReady);
+      // Refresh lobby to get updated status
+      if (lobbyIdParam) {
+        await refresh();
+      }
+    } catch (e) {
+      setActionError(formatApiErrorForUi(e));
+      // Roll forward from server truth after an API failure.
+      if (lobbyIdParam) {
+        await refresh();
+      }
+    } finally {
+      setReadyBusy(false);
+    }
+  }, [playerId, lobby, lobbyIdParam, refresh]);
+
+  const onToggleLock = useCallback(async () => {
+    if (!lobbyId || !playerId) {
+      setActionError("Waiting for player id or lobby id.");
+      return;
+    }
+    setActionError(null);
+    setLockBusy(true);
+    try {
+      const isCurrentlyLocked = lobby?.locked ?? false;
+      if (isCurrentlyLocked) {
+        await unlockLobby(lobbyId, { player_id: playerId });
+      } else {
+        await lockLobby(lobbyId, { player_id: playerId });
+      }
+      if (lobbyIdParam) {
+        // Wait for refresh to complete before clearing busy state
+        await refresh();
+      }
+    } catch (e) {
+      setActionError(formatApiErrorForUi(e));
+      setLockBusy(false);
+    } finally {
+      if (!lobbyIdParam) {
+        setLockBusy(false);
+      } else {
+        // Delay clearing busy state slightly to let state update render
+        setTimeout(() => setLockBusy(false), 100);
+      }
+    }
+  }, [lobbyId, playerId, lobby, lobbyIdParam, refresh]);
+
+  const onSetMaxPlayers = useCallback(
+    async (delta: number) => {
+      if (!lobbyId || !playerId || !lobby) return;
+      const current = lobby.max_players ?? 4;
+      const next = current + delta;
+      if (next < 1 || next > 20) return;
+      if (next < lobby.players.length && delta < 0) {
+        setActionError(`Cannot reduce max players below current member count (${lobby.players.length}).`);
+        return;
+      }
+      setActionError(null);
+      try {
+        await setMaxPlayers(lobbyId, { player_id: playerId, max_players: next });
+        await refresh();
+      } catch (e) {
+        setActionError(formatApiErrorForUi(e));
+      }
+    },
+    [lobbyId, playerId, lobby, refresh],
+  );
+
+  const onSetChallengeCount = useCallback(
+    async (delta: number) => {
+      if (!lobbyId || !playerId || !lobby) return;
+      const current = lobby.challenge_count ?? 10;
+      const next = current + delta;
+      if (next < 1 || next > 100) return;
+      setActionError(null);
+      try {
+        await setChallengeCount(lobbyId, {
+          player_id: playerId,
+          challenge_count: next,
+        });
+        await refresh();
+      } catch (e) {
+        setActionError(formatApiErrorForUi(e));
+      }
+    },
+    [lobbyId, playerId, lobby, refresh],
+  );
+
+  const onSetRoundDuration = useCallback(
+    async (delta: number) => {
+      if (!lobbyId || !playerId || !lobby) return;
+      const current = lobby.round_duration_seconds ?? 90;
+      const next = current + delta;
+      if (next < 10 || next > 600) return;
+      setActionError(null);
+      try {
+        await setRoundDuration(lobbyId, {
+          player_id: playerId,
+          round_duration_seconds: next,
+        });
+        await refresh();
+      } catch (e) {
+        setActionError(formatApiErrorForUi(e));
+      }
+    },
+    [lobbyId, playerId, lobby, refresh],
+  );
+
+  const onQuickPlay = useCallback(async () => {
+    if (!playerId) {
+      setActionError("Waiting for player id from realtime connection.");
+      return;
+    }
+    setActionError(null);
+    setQuickPlayBusy(true);
+    try {
+      const newLobby = await quickPlay({ player_id: playerId });
+      router.push(`/lobby?id=${encodeURIComponent(newLobby.id)}`);
+    } catch (e) {
+      setActionError(formatApiErrorForUi(e));
+      setQuickPlayBusy(false);
+    }
+  }, [playerId, router]);
+
   if (!lobbyIdParam) {
     return (
       <LobbyShell
@@ -425,6 +619,12 @@ function LobbyClient() {
   const isRoomLeader = Boolean(
     playerId && leaderId && playerId === leaderId,
   );
+  const nonLeaderPlayers = (lobby?.players ?? []).filter(
+    (p) => p.player_id !== leaderId,
+  );
+  const allNonLeadersReady = nonLeaderPlayers.every((p) => p.is_ready === true);
+  const myRosterEntry = (lobby?.players ?? []).find((p) => p.player_id === playerId);
+  const isMeReady = Boolean(myRosterEntry?.is_ready);
   const access = getLobbyAccessDisplay(lobby, lobbyIdParam);
   const accessHeroIsLong = access.length > 12;
   const accessLabel = hasServerShareCode(lobby) ? "ACCESS CODE" : "LOBBY ID";
@@ -577,6 +777,18 @@ function LobbyClient() {
                       ? String(lobby.challenge_count)
                       : "…"
                   }
+                  onIncrement={isRoomLeader ? () => onSetChallengeCount(1) : undefined}
+                  onDecrement={isRoomLeader ? () => onSetChallengeCount(-1) : undefined}
+                />
+                <ParamCell
+                  label="MAX PLAYERS"
+                  value={
+                    lobby?.max_players != null
+                      ? String(lobby.max_players)
+                      : "…"
+                  }
+                  onIncrement={isRoomLeader ? () => onSetMaxPlayers(1) : undefined}
+                  onDecrement={isRoomLeader ? () => onSetMaxPlayers(-1) : undefined}
                 />
                 <ParamCell
                   label="ROUND (SEC)"
@@ -585,14 +797,8 @@ function LobbyClient() {
                       ? String(lobby.round_duration_seconds)
                       : "…"
                   }
-                />
-                <ParamCell
-                  label="MAX ATTEMPTS / SEC"
-                  value={
-                    lobby?.max_attempts_per_second != null
-                      ? String(lobby.max_attempts_per_second)
-                      : "…"
-                  }
+                  onIncrement={isRoomLeader ? () => onSetRoundDuration(10) : undefined}
+                  onDecrement={isRoomLeader ? () => onSetRoundDuration(-10) : undefined}
                 />
                 <div className="border border-white/6 bg-[#0c0c0c] p-4">
                   <span
@@ -662,7 +868,7 @@ function LobbyClient() {
                         name={name}
                         highlight={isYou}
                         isRoomLeader={isLead}
-                        status={isYou ? "ready" : "waiting"}
+                        isReady={p.is_ready ?? false}
                       />
                     );
                   })}
@@ -687,39 +893,100 @@ function LobbyClient() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={onStart}
-              disabled={startBusy || !playerId || !isRoomLeader}
-              className={cn(
-                "group relative flex h-18 w-full items-center justify-center gap-3 overflow-hidden rounded-sm transition-all duration-300 md:h-20 md:gap-4",
-                "bg-linear-to-r from-[#ff7700] via-[#ff9f4a] to-[#ffc49a]",
-                "text-[#3d1800]",
-                "shadow-[0_0_0_1px_rgba(255,200,150,0.25)_inset,0_8px_40px_rgba(255,120,0,0.35),0_0_60px_rgba(255,140,0,0.2)]",
-                "hover:shadow-[0_0_0_1px_rgba(255,220,190,0.35)_inset,0_12px_48px_rgba(255,120,0,0.45),0_0_80px_rgba(255,160,80,0.25)]",
-                "active:scale-[0.99]",
-                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
-                "disabled:opacity-50",
-              )}
-            >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-0 bg-linear-to-t from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
-              />
-              <IconPlayerPlayFilled className="relative size-8 shrink-0 md:size-9" />
-              <span className="relative font-sans text-xl font-black uppercase tracking-[0.18em] md:text-2xl">
-                {startBusy ? "STARTING…" : "INITIATE LAUNCH"}
-              </span>
-            </button>
+            {isRoomLeader ? (
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={onToggleLock}
+                  disabled={lockBusy || !playerId}
+                  className={cn(
+                    "group relative flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-sm transition-all duration-300",
+                    lobby?.locked
+                      ? "border border-[#ff8c00]/60 bg-[#ff8c00]/10 text-[#ffb692]"
+                      : "border border-white/10 bg-white/5 text-[#e8e6e4]",
+                    "hover:bg-white/10",
+                    "active:scale-[0.99]",
+                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
+                    "disabled:opacity-50",
+                  )}
+                >
+                  {lobby?.locked ? (
+                    <IconLock className="size-4" />
+                  ) : (
+                    <IconLockOpen className="size-4" />
+                  )}
+                  <span className="font-mono text-xs font-bold uppercase tracking-wider">
+                    {lockBusy
+                      ? "UPDATING…"
+                      : lobby?.locked
+                        ? "PRIVATE (LOCKED)"
+                        : "PUBLIC (UNLOCKED)"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onStart}
+                  disabled={startBusy || !playerId || !allNonLeadersReady}
+                  className={cn(
+                    "group relative flex h-18 w-full items-center justify-center gap-3 overflow-hidden rounded-sm transition-all duration-300 md:h-20 md:gap-4",
+                    "bg-linear-to-r from-[#ff7700] via-[#ff9f4a] to-[#ffc49a]",
+                    "text-[#3d1800]",
+                    "shadow-[0_0_0_1px_rgba(255,200,150,0.25)_inset,0_8px_40px_rgba(255,120,0,0.35),0_0_60px_rgba(255,140,0,0.2)]",
+                    "hover:shadow-[0_0_0_1px_rgba(255,220,190,0.35)_inset,0_12px_48px_rgba(255,120,0,0.45),0_0_80px_rgba(255,160,80,0.25)]",
+                    "active:scale-[0.99]",
+                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
+                    "disabled:opacity-50",
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 bg-linear-to-t from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
+                  />
+                  <IconPlayerPlayFilled className="relative size-8 shrink-0 md:size-9" />
+                  <span className="relative font-sans text-xl font-black uppercase tracking-[0.18em] md:text-2xl">
+                    {startBusy ? "STARTING…" : "INITIATE LAUNCH"}
+                  </span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={onToggleReady}
+                disabled={readyBusy || !playerId}
+                className={cn(
+                  "group relative flex h-18 w-full items-center justify-center gap-3 overflow-hidden rounded-sm transition-all duration-300 md:h-20 md:gap-4",
+                  isMeReady
+                    ? "bg-linear-to-r from-[#ff7700] via-[#ff9f4a] to-[#ffc49a] text-[#3d1800]"
+                    : "border border-white/10 bg-[#252525] text-[#e8e6e4]",
+                  "active:scale-[0.99]",
+                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
+                  "disabled:opacity-50",
+                )}
+              >
+                {isMeReady ? (
+                  <IconCheck className="relative size-8 shrink-0 md:size-9" />
+                ) : (
+                  <IconClock className="relative size-8 shrink-0 md:size-9" />
+                )}
+                <span className="relative font-sans text-xl font-black uppercase tracking-[0.18em] md:text-2xl">
+                  {readyBusy ? "UPDATING…" : isMeReady ? "READY" : "MARK READY"}
+                </span>
+              </button>
+            )}
             {!playerId && (
               <p className="text-center text-xs text-[#c45c4a]/90">
                 Waiting for player id from the server. Check realtime connection
                 and Retry on the home screen.
               </p>
             )}
+            {playerId && lobby && isRoomLeader && !allNonLeadersReady && (
+              <p className="text-center text-xs text-[#888888]">
+                Waiting for all non-leader players to mark ready.
+              </p>
+            )}
             {playerId && lobby && !isRoomLeader && (
               <p className="text-center text-xs text-[#888888]">
-                Only the room leader can start. Wait for the host to launch.
+                Mark ready when you are set. Host can launch once everyone is ready.
               </p>
             )}
           </div>
@@ -780,9 +1047,19 @@ export default function LobbyPage() {
   );
 }
 
-function ParamCell({ label, value }: { label: string; value: string }) {
+function ParamCell({
+  label,
+  value,
+  onIncrement,
+  onDecrement,
+}: {
+  label: string;
+  value: string;
+  onIncrement?: () => void;
+  onDecrement?: () => void;
+}) {
   return (
-    <div className="border border-white/6 bg-[#0c0c0c] p-4">
+    <div className="group relative border border-white/6 bg-[#0c0c0c] p-4">
       <span
         className={cn(
           "mb-1.5 block text-[10px] font-bold uppercase tracking-[0.2em]",
@@ -791,9 +1068,29 @@ function ParamCell({ label, value }: { label: string; value: string }) {
       >
         {label}
       </span>
-      <span className="font-mono text-lg font-medium tracking-wide text-white">
-        {value}
-      </span>
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-lg font-medium tracking-wide text-white">
+          {value}
+        </span>
+        {onIncrement && onDecrement && (
+          <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={onDecrement}
+              className="flex size-6 items-center justify-center rounded border border-white/10 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+            >
+              <IconMinus className="size-3" stroke={3} />
+            </button>
+            <button
+              type="button"
+              onClick={onIncrement}
+              className="flex size-6 items-center justify-center rounded border border-white/10 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+            >
+              <IconPlus className="size-3" stroke={3} />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -801,15 +1098,15 @@ function ParamCell({ label, value }: { label: string; value: string }) {
 function PlayerRow({
   slot,
   name,
-  status,
   highlight,
   isRoomLeader,
+  isReady,
 }: {
   slot: string;
   name: string;
-  status: "ready" | "waiting";
   highlight?: boolean;
   isRoomLeader?: boolean;
+  isReady: boolean;
 }) {
   const subtitle = isRoomLeader
     ? highlight
@@ -853,7 +1150,7 @@ function PlayerRow({
           </span>
         </div>
       </div>
-      {status === "ready" ? (
+      {isReady ? (
         <div
           className={cn(
             "z-10 flex shrink-0 items-center gap-2 rounded-sm px-3 py-2 md:px-4",

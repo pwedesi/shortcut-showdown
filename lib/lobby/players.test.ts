@@ -3,7 +3,7 @@ import {
   lobbyHasPlayer,
   lobbyPlayerEntryToId,
   normalizeLobbyFromApi,
-} from "@/lib/lobbyPlayers";
+} from "@/lib/lobby";
 
 describe("lobbyPlayers", () => {
   it("lobbyPlayerEntryToId accepts strings and common object shapes", () => {
@@ -24,11 +24,13 @@ describe("lobbyPlayers", () => {
             player_id: "u1",
             display_name: "OPERATOR_01",
             is_leader: true,
+            is_ready: true,
           },
           {
             player_id: "u2",
             display_name: "guest",
             is_leader: false,
+            is_ready: false,
           },
         ],
         status: "full",
@@ -40,10 +42,12 @@ describe("lobbyPlayers", () => {
           player_id: "u1",
           display_name: "OPERATOR_01",
           is_leader: true,
+          is_ready: true,
         },
         {
           player_id: "u2",
           display_name: "guest",
+          is_ready: false,
         },
       ],
       status: "full",

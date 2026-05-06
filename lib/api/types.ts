@@ -37,6 +37,8 @@ export type LobbyRosterPlayer = {
   display_name?: string;
   /** When true, this player may start the match (from API roster). */
   is_leader?: boolean;
+  /** When true, this player has marked themselves as ready. */
+  is_ready?: boolean;
 };
 
 /** Server lobby shape (minimal contract for Phase 1). */
@@ -59,6 +61,8 @@ export type Lobby = {
   challenge_count?: number;
   round_duration_seconds?: number;
   max_attempts_per_second?: number;
+  /** When true, lobby is private (hidden from quick-play). */
+  locked?: boolean;
   /**
    * Set once a match is created from this lobby; non-leader clients use this
    * (with GET /lobbies polling) to follow the host into `/gameplay`.
@@ -133,4 +137,47 @@ export type AttemptResponse = {
   objective_index: number;
   state_version: number;
   game_state: GameStateView;
+};
+
+/** Serialized `GameEndReason` from the API. */
+export type GameEndReason = "time" | "goal" | "forfeit" | string;
+
+/** One row on the match podium (`GET /game-rooms/{id}/results`). */
+export type MatchPlacementView = {
+  player_id: string;
+  display_name: string;
+  place: number;
+  objective_index: number;
+  progress_percent: number;
+  wpm: number;
+  accuracy: number;
+  streak: number;
+  attempts_total: number;
+  attempts_correct: number;
+  finished: boolean;
+  finished_at: number | null;
+};
+
+export type MatchResultsView = {
+  room_id: string;
+  you_player_id: string | null;
+  placements: MatchPlacementView[];
+  winner_player_id: string | null;
+  draw: boolean;
+  end_reason: GameEndReason | null;
+  ended_at: number | null;
+  finished: boolean;
+};
+
+export type RematchAcceptanceResponse = {
+  room_id: string;
+  player_id: string;
+  accepted: boolean;
+  all_accepted: boolean;
+  pending_players: string[];
+};
+
+export type RematchResponse = {
+  room_id: string;
+  next_lobby_id: string;
 };

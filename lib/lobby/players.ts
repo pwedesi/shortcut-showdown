@@ -33,6 +33,9 @@ function normalizeLobbyRosterEntry(entry: unknown): LobbyRosterPlayer | null {
   if (o.is_leader === true) {
     out.is_leader = true;
   }
+  if (typeof o.is_ready === "boolean") {
+    out.is_ready = o.is_ready;
+  }
   return out;
 }
 
@@ -71,6 +74,9 @@ export function normalizeLobbyFromApi(data: unknown): Lobby {
   }
   if (typeof o.host_player_id === "string" && o.host_player_id.trim()) {
     out.host_player_id = o.host_player_id.trim();
+  }
+  if (typeof o.locked === "boolean") {
+    out.locked = o.locked;
   }
   const challenge_count = o.challenge_count;
   if (typeof challenge_count === "number" && Number.isFinite(challenge_count)) {

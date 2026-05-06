@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseJoinLobbyInput } from "@/lib/lobbyQuery";
+import { parseJoinLobbyInput } from "@/lib/lobby";
 
 describe("parseJoinLobbyInput", () => {
   it("accepts hyphenated UUIDs", () => {

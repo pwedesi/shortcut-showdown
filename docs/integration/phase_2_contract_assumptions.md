@@ -25,4 +25,4 @@ The web app is implemented against the FastAPI `shortcut-showdown-api` in a sibl
 
 - **WebSocket drop:** the API removes the player from the room and may forfeit the match on disconnect. A new WebSocket connection receives a new `player_id`; there is no token to resume the pre-drop identity from the browser alone. Polling and `GET /game-rooms` still return **public** state, but `POST` attempts need the same `player_id` that the server still associates with the room; after a full disconnect, that identity is typically lost.
 - **`POST /attempts` vs WS `input`:** the app uses **HTTP** for attempts; WS is for live snapshots and `sync_state` if needed.
-- **Results page:** route receives `?room=&player=`; full podium from `GET /game-rooms/{id}/results` is reserved for a later phase.
+- **Results page:** route receives `?room=&player=`; podium and telemetry load from `GET /game-rooms/{id}/results?player_id=` (see [Phase 3 backend contract](phase_3_backend_requirements.md)). Rematch uses `POST /game-rooms/{id}/rematch`.

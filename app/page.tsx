@@ -7,11 +7,11 @@ import {
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { createLobby, joinLobby, ApiError } from "@/lib/api";
+import { createLobby, joinLobby, quickPlay, ApiError } from "@/lib/api";
 import { formatApiErrorForUi } from "@/lib/api/errors";
 import { loadCallsignFromStorage, saveCallsignToStorage } from "@/lib/callsign";
 import { getAppDisplayVersion } from "@/lib/config";
-import { buildLobbyPath, parseJoinLobbyInput } from "@/lib/lobbyQuery";
+import { buildLobbyPath, parseJoinLobbyInput } from "@/lib/lobby";
 import { usePlayerConnection } from "@/lib/realtime/playerConnection";
 
 function connectionLabel(
@@ -36,7 +36,7 @@ export default function Home() {
   const [showJoin, setShowJoin] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"create" | "join" | null>(null);
+  const [busy, setBusy] = useState<"create" | "join" | "quickplay" | null>(null);
 
   useEffect(() => {
     setCallsign(loadCallsignFromStorage());
@@ -94,6 +94,25 @@ export default function Home() {
       setBusy(null);
     }
   }, [playerId, joinCode, router, callsign]);
+
+  const onQuickPlay = useCallback(async () => {
+    setActionError(null);
+    if (!playerId) {
+      setActionError(
+        "Not connected to the server. Wait for the realtime link or try Retry.",
+      );
+      return;
+    }
+    setBusy("quickplay");
+    try {
+      const lobby = await quickPlay({ player_id: playerId });
+      saveCallsignToStorage(callsign);
+      router.replace(buildLobbyPath(lobby));
+    } catch (e) {
+      setActionError(formatApiErrorForUi(e));
+      setBusy(null);
+    }
+  }, [playerId, router, callsign]);
 
   const conn = connectionLabel(status);
   const appVersion = getAppDisplayVersion();
@@ -190,13 +209,13 @@ export default function Home() {
           <div className="mt-8 flex flex-col gap-4">
             <button
               type="button"
-              disabled
-              title="Start a match from a lobby when the host launches the game."
-              className="relative w-full cursor-not-allowed overflow-hidden rounded-sm bg-linear-to-b from-[#ff9500] via-[#ff7b00] to-[#e85d00] py-4 font-sans text-lg font-bold tracking-[0.12em] text-[#341100] uppercase shadow-[0_0_0_1px_color-mix(in_srgb,#fff_12%,transparent)_inset] opacity-50"
+              onClick={onQuickPlay}
+              disabled={busy !== null}
+              className="relative w-full overflow-hidden rounded-sm bg-linear-to-b from-[#ff9500] via-[#ff7b00] to-[#e85d00] py-4 font-sans text-lg font-bold tracking-[0.12em] text-[#341100] uppercase shadow-[0_0_0_1px_color-mix(in_srgb,#fff_12%,transparent)_inset] transition-opacity hover:shadow-[0_0_0_1px_color-mix(in_srgb,#fff_20%,transparent)_inset] disabled:opacity-50"
             >
               <span className="flex items-center justify-center gap-2">
                 <IconPlayerPlayFilled className="size-6" aria-hidden />
-                Quick Play (use lobby)
+                {busy === "quickplay" ? "Loading…" : "Quick Play"}
               </span>
             </button>
 

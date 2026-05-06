@@ -1,5 +1,5 @@
 import type { Lobby } from "@/lib/api/types";
-import { lobbyPlayerEntryToId } from "@/lib/lobbyPlayers";
+import { lobbyPlayerEntryToId } from "./players";
 
 const DEFAULT_MAX = 8;
 
