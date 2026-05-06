@@ -61,6 +61,8 @@ export type Lobby = {
   challenge_count?: number;
   round_duration_seconds?: number;
   max_attempts_per_second?: number;
+  /** When true, lobby is private (hidden from quick-play). */
+  locked?: boolean;
   /**
    * Set once a match is created from this lobby; non-leader clients use this
    * (with GET /lobbies polling) to follow the host into `/gameplay`.
@@ -165,6 +167,14 @@ export type MatchResultsView = {
   end_reason: GameEndReason | null;
   ended_at: number | null;
   finished: boolean;
+};
+
+export type RematchAcceptanceResponse = {
+  room_id: string;
+  player_id: string;
+  accepted: boolean;
+  all_accepted: boolean;
+  pending_players: string[];
 };
 
 export type RematchResponse = {

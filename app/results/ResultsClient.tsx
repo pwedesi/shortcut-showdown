@@ -5,12 +5,15 @@ import {
   IconHome,
   IconPlayerPlayFilled,
   IconUsersPlus,
+  IconCheck,
+  IconX,
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ApiError, createRematch, type MatchResultsView } from "@/lib/api";
+import { ApiError, acceptRematch, declineRematch, type MatchResultsView } from "@/lib/api";
 import { formatApiErrorForUi } from "@/lib/api/errors";
+import { usePlayerConnection, useWebSocketMessageListener } from "@/lib/realtime/playerConnection";
 import { fetchMatchResultsWithRetry } from "@/lib/results/fetchMatchResultsWithRetry";
 import {
   findPlacementForPlayer,
@@ -59,9 +62,43 @@ export function ResultsClient() {
   const [results, setResults] = useState<MatchResultsView | null>(null);
 
   const [rematchState, setRematchState] = useState<
-    "idle" | "pending" | "failed"
+    "idle" | "accepting" | "declined" | "error"
   >("idle");
   const [rematchError, setRematchError] = useState<string | null>(null);
+  const [rematchAcceptances, setRematchAcceptances] = useState<{
+    [playerId: string]: boolean;
+  }>({});
+  const [pendingPlayers, setPendingPlayers] = useState<string[]>([]);
+
+  const { status, playerId: wsPlayerId, sendWebSocketJson } = usePlayerConnection();
+
+  useEffect(() => {
+    if (status === "connected" && roomId && wsPlayerId) {
+      sendWebSocketJson({
+        type: "join_room",
+        payload: { room_id: roomId, player_id: wsPlayerId },
+      });
+    }
+  }, [status, roomId, wsPlayerId, sendWebSocketJson]);
+
+  useWebSocketMessageListener(
+    useCallback(
+      (data: any) => {
+        if (data.type === "rematch_ready") {
+          const { next_lobby_id } = data.payload;
+          router.push(`/lobby?id=${next_lobby_id}`);
+        } else if (data.type === "rematch_acceptance_update") {
+          const { acceptances, pending_players } = data.payload;
+          setRematchAcceptances(acceptances);
+          setPendingPlayers(pending_players);
+        } else if (data.type === "rematch_declined") {
+          const { player_id } = data.payload;
+          setRematchAcceptances((prev) => ({ ...prev, [player_id]: false }));
+        }
+      },
+      [router],
+    ),
+  );
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -128,22 +165,46 @@ export function ResultsClient() {
   const headline = results ? resultsOutcomeHeadline(results) : "RACE COMPLETE";
   const subcopy = results ? resultsOutcomeSubcopy(results) : "Loading…";
 
-  async function onRematch() {
+  async function onAcceptRematch() {
     if (!roomId || !playerId) {
-      setRematchState("failed");
+      setRematchState("error");
       setRematchError("Missing player id. Reopen results from the game client.");
       return;
     }
-    setRematchState("pending");
+    setRematchState("accepting");
     setRematchError(null);
     try {
-      const res = await createRematch(roomId, { player_id: playerId });
-      router.push(
-        `/lobby?id=${encodeURIComponent(res.next_lobby_id)}`,
-      );
-      setRematchState("idle");
+      const res = await acceptRematch(roomId, { player_id: playerId });
+      setRematchAcceptances((prev) => ({ ...prev, [playerId]: true }));
+      setPendingPlayers(res.pending_players);
+      
+      if (res.all_accepted) {
+        // All players accepted, navigate to rematch lobby
+        // Note: rematch_ready event from WebSocket will redirect us
+        setRematchState("idle");
+      } else {
+        setRematchState("idle");
+      }
     } catch (e) {
-      setRematchState("failed");
+      setRematchState("error");
+      setRematchError(rematchMessage(e));
+    }
+  }
+
+  async function onDeclineRematch() {
+    if (!roomId || !playerId) {
+      setRematchState("error");
+      setRematchError("Missing player id. Reopen results from the game client.");
+      return;
+    }
+    setRematchState("declined");
+    setRematchError(null);
+    try {
+      const res = await declineRematch(roomId, { player_id: playerId });
+      setRematchAcceptances((prev) => ({ ...prev, [playerId]: false }));
+      setPendingPlayers(res.pending_players);
+    } catch (e) {
+      setRematchState("error");
       setRematchError(rematchMessage(e));
     }
   }
@@ -416,21 +477,58 @@ export function ResultsClient() {
           </div>
 
           <div className="mt-5 space-y-3">
-            {rematchState === "failed" && rematchError ? (
+            {rematchState === "error" && rematchError ? (
               <p className="text-center text-sm text-[#ff9d90]" role="alert">
                 {rematchError}
               </p>
             ) : null}
 
-            <button
-              type="button"
-              disabled={rematchState === "pending" || !playerId}
-              onClick={() => void onRematch()}
-              className="flex w-full items-center justify-center gap-2 rounded-sm border border-[#d36f20] bg-linear-to-r from-[#d46008] to-[#d09060] px-5 py-3.5 text-sm font-black tracking-[0.12em] text-[#1d1208] uppercase transition hover:brightness-105 disabled:opacity-50"
-            >
-              <IconPlayerPlayFilled className="size-4" />
-              {rematchState === "pending" ? "Rematch…" : "Rematch"}
-            </button>
+            {rematchAcceptances[playerId || ""] === undefined ? (
+              <>
+                <p className="text-center text-sm text-[#ffb692]">
+                  Ready for a rematch?
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    disabled={rematchState === "accepting"}
+                    onClick={() => void onAcceptRematch()}
+                    className="flex items-center justify-center gap-2 rounded-sm border border-[#4caf50]/60 bg-[#1b5e20]/20 px-4 py-3 text-sm font-bold tracking-[0.12em] text-[#81c784] uppercase transition hover:bg-[#1b5e20]/30 disabled:opacity-50"
+                  >
+                    <IconCheck className="size-4" />
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    disabled={rematchState === "accepting"}
+                    onClick={() => void onDeclineRematch()}
+                    className="flex items-center justify-center gap-2 rounded-sm border border-[#f44336]/60 bg-[#b71c1c]/20 px-4 py-3 text-sm font-bold tracking-[0.12em] text-[#ef5350] uppercase transition hover:bg-[#b71c1c]/30 disabled:opacity-50"
+                  >
+                    <IconX className="size-4" />
+                    Decline
+                  </button>
+                </div>
+              </>
+            ) : rematchAcceptances[playerId || ""] ? (
+              <>
+                <p className="text-center text-sm text-[#81c784]">
+                  ✓ You accepted rematch
+                </p>
+                {pendingPlayers.length > 0 ? (
+                  <p className="text-center text-xs text-[#ffb692]">
+                    Waiting for {pendingPlayers.length} player{pendingPlayers.length !== 1 ? "s" : ""}…
+                  </p>
+                ) : (
+                  <p className="text-center text-xs text-[#81c784]">
+                    Finalizing roster…
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-center text-sm text-[#ef5350]">
+                You declined rematch
+              </p>
+            )}
 
             <div className="grid grid-cols-[1fr_auto] gap-3">
               <button

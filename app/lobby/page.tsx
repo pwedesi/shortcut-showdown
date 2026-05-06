@@ -8,11 +8,15 @@ import {
   IconFlame,
   IconLayoutGrid,
   IconPlayerPlayFilled,
+  IconMinus,
   IconPlus,
   IconSettings,
   IconAdjustments,
   IconUser,
   IconUsersGroup,
+  IconLock,
+  IconLockOpen,
+  IconPlayerPlay,
 } from "@tabler/icons-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -27,7 +31,13 @@ import {
   getLobby,
   joinLobby,
   leaveLobby,
+  lockLobby,
+  quickPlay,
+  setChallengeCount,
+  setMaxPlayers,
+  setRoundDuration,
   startLobby,
+  unlockLobby,
   updatePlayerDisplayName,
   updatePlayerReadyStatus,
   type Lobby,
@@ -185,6 +195,8 @@ function LobbyClient() {
   const [startBusy, setStartBusy] = useState(false);
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [readyBusy, setReadyBusy] = useState(false);
+  const [lockBusy, setLockBusy] = useState(false);
+  const [quickPlayBusy, setQuickPlayBusy] = useState(false);
   const [lastPoll, setLastPoll] = useState(0);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -463,6 +475,114 @@ function LobbyClient() {
     }
   }, [playerId, lobby, lobbyIdParam, refresh]);
 
+  const onToggleLock = useCallback(async () => {
+    if (!lobbyId || !playerId) {
+      setActionError("Waiting for player id or lobby id.");
+      return;
+    }
+    setActionError(null);
+    setLockBusy(true);
+    try {
+      const isCurrentlyLocked = lobby?.locked ?? false;
+      if (isCurrentlyLocked) {
+        await unlockLobby(lobbyId, { player_id: playerId });
+      } else {
+        await lockLobby(lobbyId, { player_id: playerId });
+      }
+      if (lobbyIdParam) {
+        // Wait for refresh to complete before clearing busy state
+        await refresh();
+      }
+    } catch (e) {
+      setActionError(formatApiErrorForUi(e));
+      setLockBusy(false);
+    } finally {
+      if (!lobbyIdParam) {
+        setLockBusy(false);
+      } else {
+        // Delay clearing busy state slightly to let state update render
+        setTimeout(() => setLockBusy(false), 100);
+      }
+    }
+  }, [lobbyId, playerId, lobby, lobbyIdParam, refresh]);
+
+  const onSetMaxPlayers = useCallback(
+    async (delta: number) => {
+      if (!lobbyId || !playerId || !lobby) return;
+      const current = lobby.max_players ?? 4;
+      const next = current + delta;
+      if (next < 1 || next > 20) return;
+      if (next < lobby.players.length && delta < 0) {
+        setActionError(`Cannot reduce max players below current member count (${lobby.players.length}).`);
+        return;
+      }
+      setActionError(null);
+      try {
+        await setMaxPlayers(lobbyId, { player_id: playerId, max_players: next });
+        await refresh();
+      } catch (e) {
+        setActionError(formatApiErrorForUi(e));
+      }
+    },
+    [lobbyId, playerId, lobby, refresh],
+  );
+
+  const onSetChallengeCount = useCallback(
+    async (delta: number) => {
+      if (!lobbyId || !playerId || !lobby) return;
+      const current = lobby.challenge_count ?? 10;
+      const next = current + delta;
+      if (next < 1 || next > 100) return;
+      setActionError(null);
+      try {
+        await setChallengeCount(lobbyId, {
+          player_id: playerId,
+          challenge_count: next,
+        });
+        await refresh();
+      } catch (e) {
+        setActionError(formatApiErrorForUi(e));
+      }
+    },
+    [lobbyId, playerId, lobby, refresh],
+  );
+
+  const onSetRoundDuration = useCallback(
+    async (delta: number) => {
+      if (!lobbyId || !playerId || !lobby) return;
+      const current = lobby.round_duration_seconds ?? 90;
+      const next = current + delta;
+      if (next < 10 || next > 600) return;
+      setActionError(null);
+      try {
+        await setRoundDuration(lobbyId, {
+          player_id: playerId,
+          round_duration_seconds: next,
+        });
+        await refresh();
+      } catch (e) {
+        setActionError(formatApiErrorForUi(e));
+      }
+    },
+    [lobbyId, playerId, lobby, refresh],
+  );
+
+  const onQuickPlay = useCallback(async () => {
+    if (!playerId) {
+      setActionError("Waiting for player id from realtime connection.");
+      return;
+    }
+    setActionError(null);
+    setQuickPlayBusy(true);
+    try {
+      const newLobby = await quickPlay({ player_id: playerId });
+      router.push(`/lobby?id=${encodeURIComponent(newLobby.id)}`);
+    } catch (e) {
+      setActionError(formatApiErrorForUi(e));
+      setQuickPlayBusy(false);
+    }
+  }, [playerId, router]);
+
   if (!lobbyIdParam) {
     return (
       <LobbyShell
@@ -657,6 +777,18 @@ function LobbyClient() {
                       ? String(lobby.challenge_count)
                       : "…"
                   }
+                  onIncrement={isRoomLeader ? () => onSetChallengeCount(1) : undefined}
+                  onDecrement={isRoomLeader ? () => onSetChallengeCount(-1) : undefined}
+                />
+                <ParamCell
+                  label="MAX PLAYERS"
+                  value={
+                    lobby?.max_players != null
+                      ? String(lobby.max_players)
+                      : "…"
+                  }
+                  onIncrement={isRoomLeader ? () => onSetMaxPlayers(1) : undefined}
+                  onDecrement={isRoomLeader ? () => onSetMaxPlayers(-1) : undefined}
                 />
                 <ParamCell
                   label="ROUND (SEC)"
@@ -665,14 +797,8 @@ function LobbyClient() {
                       ? String(lobby.round_duration_seconds)
                       : "…"
                   }
-                />
-                <ParamCell
-                  label="MAX ATTEMPTS / SEC"
-                  value={
-                    lobby?.max_attempts_per_second != null
-                      ? String(lobby.max_attempts_per_second)
-                      : "…"
-                  }
+                  onIncrement={isRoomLeader ? () => onSetRoundDuration(10) : undefined}
+                  onDecrement={isRoomLeader ? () => onSetRoundDuration(-10) : undefined}
                 />
                 <div className="border border-white/6 bg-[#0c0c0c] p-4">
                   <span
@@ -768,30 +894,60 @@ function LobbyClient() {
             </div>
 
             {isRoomLeader ? (
-              <button
-                type="button"
-                onClick={onStart}
-                disabled={startBusy || !playerId || !allNonLeadersReady}
-                className={cn(
-                  "group relative flex h-18 w-full items-center justify-center gap-3 overflow-hidden rounded-sm transition-all duration-300 md:h-20 md:gap-4",
-                  "bg-linear-to-r from-[#ff7700] via-[#ff9f4a] to-[#ffc49a]",
-                  "text-[#3d1800]",
-                  "shadow-[0_0_0_1px_rgba(255,200,150,0.25)_inset,0_8px_40px_rgba(255,120,0,0.35),0_0_60px_rgba(255,140,0,0.2)]",
-                  "hover:shadow-[0_0_0_1px_rgba(255,220,190,0.35)_inset,0_12px_48px_rgba(255,120,0,0.45),0_0_80px_rgba(255,160,80,0.25)]",
-                  "active:scale-[0.99]",
-                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
-                  "disabled:opacity-50",
-                )}
-              >
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 bg-linear-to-t from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
-                />
-                <IconPlayerPlayFilled className="relative size-8 shrink-0 md:size-9" />
-                <span className="relative font-sans text-xl font-black uppercase tracking-[0.18em] md:text-2xl">
-                  {startBusy ? "STARTING…" : "INITIATE LAUNCH"}
-                </span>
-              </button>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={onToggleLock}
+                  disabled={lockBusy || !playerId}
+                  className={cn(
+                    "group relative flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-sm transition-all duration-300",
+                    lobby?.locked
+                      ? "border border-[#ff8c00]/60 bg-[#ff8c00]/10 text-[#ffb692]"
+                      : "border border-white/10 bg-white/5 text-[#e8e6e4]",
+                    "hover:bg-white/10",
+                    "active:scale-[0.99]",
+                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
+                    "disabled:opacity-50",
+                  )}
+                >
+                  {lobby?.locked ? (
+                    <IconLock className="size-4" />
+                  ) : (
+                    <IconLockOpen className="size-4" />
+                  )}
+                  <span className="font-mono text-xs font-bold uppercase tracking-wider">
+                    {lockBusy
+                      ? "UPDATING…"
+                      : lobby?.locked
+                        ? "PRIVATE (LOCKED)"
+                        : "PUBLIC (UNLOCKED)"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onStart}
+                  disabled={startBusy || !playerId || !allNonLeadersReady}
+                  className={cn(
+                    "group relative flex h-18 w-full items-center justify-center gap-3 overflow-hidden rounded-sm transition-all duration-300 md:h-20 md:gap-4",
+                    "bg-linear-to-r from-[#ff7700] via-[#ff9f4a] to-[#ffc49a]",
+                    "text-[#3d1800]",
+                    "shadow-[0_0_0_1px_rgba(255,200,150,0.25)_inset,0_8px_40px_rgba(255,120,0,0.35),0_0_60px_rgba(255,140,0,0.2)]",
+                    "hover:shadow-[0_0_0_1px_rgba(255,220,190,0.35)_inset,0_12px_48px_rgba(255,120,0,0.45),0_0_80px_rgba(255,160,80,0.25)]",
+                    "active:scale-[0.99]",
+                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
+                    "disabled:opacity-50",
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 bg-linear-to-t from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
+                  />
+                  <IconPlayerPlayFilled className="relative size-8 shrink-0 md:size-9" />
+                  <span className="relative font-sans text-xl font-black uppercase tracking-[0.18em] md:text-2xl">
+                    {startBusy ? "STARTING…" : "INITIATE LAUNCH"}
+                  </span>
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
@@ -891,9 +1047,19 @@ export default function LobbyPage() {
   );
 }
 
-function ParamCell({ label, value }: { label: string; value: string }) {
+function ParamCell({
+  label,
+  value,
+  onIncrement,
+  onDecrement,
+}: {
+  label: string;
+  value: string;
+  onIncrement?: () => void;
+  onDecrement?: () => void;
+}) {
   return (
-    <div className="border border-white/6 bg-[#0c0c0c] p-4">
+    <div className="group relative border border-white/6 bg-[#0c0c0c] p-4">
       <span
         className={cn(
           "mb-1.5 block text-[10px] font-bold uppercase tracking-[0.2em]",
@@ -902,9 +1068,29 @@ function ParamCell({ label, value }: { label: string; value: string }) {
       >
         {label}
       </span>
-      <span className="font-mono text-lg font-medium tracking-wide text-white">
-        {value}
-      </span>
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-lg font-medium tracking-wide text-white">
+          {value}
+        </span>
+        {onIncrement && onDecrement && (
+          <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={onDecrement}
+              className="flex size-6 items-center justify-center rounded border border-white/10 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+            >
+              <IconMinus className="size-3" stroke={3} />
+            </button>
+            <button
+              type="button"
+              onClick={onIncrement}
+              className="flex size-6 items-center justify-center rounded border border-white/10 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+            >
+              <IconPlus className="size-3" stroke={3} />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

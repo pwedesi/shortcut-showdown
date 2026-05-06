@@ -4,10 +4,18 @@ export {
   getLobby,
   joinLobby,
   leaveLobby,
+  lockLobby,
+  quickPlay,
+  setChallengeCount,
+  setMaxPlayers,
+  setRoundDuration,
   startLobby,
+  unlockLobby,
 } from "@/lib/api/lobbies";
 export {
+  acceptRematch,
   createRematch,
+  declineRematch,
   getGameRoom,
   getMatchResults,
   submitGameAttempt,
@@ -25,6 +33,7 @@ export type {
   MatchPlacementView,
   MatchResultsView,
   PublicChallenge,
+  RematchAcceptanceResponse,
   RematchResponse,
   StartLobbyResponse,
 } from "@/lib/api/types";
