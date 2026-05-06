@@ -6,7 +6,15 @@ export function formatApiErrorForUi(err: unknown): string {
       return "No lobby found with that code. Check and try again.";
     }
     if (err.code === "conflict") {
-      return "That lobby is full or not accepting players right now.";
+      const raw = err.message || "";
+      const msg = raw.toLowerCase();
+      if (msg.includes("already in a lobby")) {
+        return "You're already in a lobby. Leave it before starting another.";
+      }
+      if (msg.includes("lobby is full") || msg.includes("full")) {
+        return "That lobby is full or not accepting players right now.";
+      }
+      return raw || "That lobby is full or not accepting players right now.";
     }
     if (err.code === "bad_request") {
       return err.message || "The request was invalid. Try again.";

@@ -16,7 +16,6 @@ import {
   IconUsersGroup,
   IconLock,
   IconLockOpen,
-  IconPlayerPlay,
 } from "@tabler/icons-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -30,6 +29,7 @@ import {
 import {
   getLobby,
   joinLobby,
+  kickPlayer,
   leaveLobby,
   lockLobby,
   quickPlay,
@@ -197,6 +197,7 @@ function LobbyClient() {
   const [readyBusy, setReadyBusy] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
   const [quickPlayBusy, setQuickPlayBusy] = useState(false);
+  const [kickBusyPlayerId, setKickBusyPlayerId] = useState<string | null>(null);
   const [lastPoll, setLastPoll] = useState(0);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -583,6 +584,38 @@ function LobbyClient() {
     }
   }, [playerId, router]);
 
+  const onKickPlayer = useCallback(
+    async (targetPlayerId: string) => {
+      if (!lobbyId || !playerId) {
+        setActionError("Waiting for player id or lobby id.");
+        return;
+      }
+      if (!lobby || getLobbyLeaderPlayerId(lobby) !== playerId) {
+        setActionError("Only the room leader can kick players.");
+        return;
+      }
+      if (targetPlayerId === playerId) {
+        return;
+      }
+      setActionError(null);
+      setKickBusyPlayerId(targetPlayerId);
+      try {
+        await kickPlayer(lobbyId, {
+          player_id: playerId,
+          target_player_id: targetPlayerId,
+        });
+        await refresh();
+      } catch (e) {
+        setActionError(formatApiErrorForUi(e));
+      } finally {
+        setKickBusyPlayerId((prev) =>
+          prev === targetPlayerId ? null : prev,
+        );
+      }
+    },
+    [lobbyId, playerId, lobby, refresh],
+  );
+
   if (!lobbyIdParam) {
     return (
       <LobbyShell
@@ -634,6 +667,23 @@ function LobbyClient() {
       : status === "reconnecting" || status === "connecting"
         ? "Realtime: connecting…"
         : `Realtime: ${status}${lastError ? ` · ${lastError}` : ""}`;
+
+  const roster = lobby?.players ?? [];
+  const rosterNames = roster.map((p) => {
+    const isYou = playerId != null && p.player_id === playerId;
+    const base =
+      isYou && callsign.trim()
+        ? callsign.trim()
+        : p.display_name && p.display_name.trim()
+          ? p.display_name.trim()
+          : `Player ${shortPlayerId(p.player_id)}`;
+    return { playerId: p.player_id, base, isYou };
+  });
+  const nameCounts = new Map<string, number>();
+  rosterNames.forEach(({ base }) => {
+    const key = base.toLowerCase();
+    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+  });
 
   return (
     <LobbyShell
@@ -852,15 +902,14 @@ function LobbyClient() {
                     const pid = p.player_id;
                     const isYou = playerId != null && pid === playerId;
                     const isLead = leaderId != null && pid === leaderId;
-                    const remoteLabel =
-                      p.display_name && p.display_name.trim()
-                        ? p.display_name.trim()
-                        : `Player ${shortPlayerId(pid)}`;
-                    const name = isYou
-                      ? callsign.trim() !== ""
-                        ? `${callsign} (you)`
-                        : "You"
-                      : remoteLabel;
+                    const base = rosterNames[i]?.base ?? "Player";
+                    const key = base.toLowerCase();
+                    const needsSuffix = (nameCounts.get(key) ?? 0) > 1;
+                    const disambiguated = needsSuffix
+                      ? `${base} · ${shortPlayerId(pid, 4)}`
+                      : base;
+                    const name = isYou ? `${disambiguated} (you)` : disambiguated;
+                    const canKick = isRoomLeader && !isYou;
                     return (
                       <PlayerRow
                         key={`${pid}-${i}`}
@@ -869,6 +918,11 @@ function LobbyClient() {
                         highlight={isYou}
                         isRoomLeader={isLead}
                         isReady={p.is_ready ?? false}
+                        canKick={canKick}
+                        kickBusy={kickBusyPlayerId === pid}
+                        onKick={
+                          canKick ? () => onKickPlayer(pid) : undefined
+                        }
                       />
                     );
                   })}
@@ -1101,12 +1155,18 @@ function PlayerRow({
   highlight,
   isRoomLeader,
   isReady,
+  canKick,
+  onKick,
+  kickBusy,
 }: {
   slot: string;
   name: string;
   highlight?: boolean;
   isRoomLeader?: boolean;
   isReady: boolean;
+  canKick?: boolean;
+  onKick?: () => void;
+  kickBusy?: boolean;
 }) {
   const subtitle = isRoomLeader
     ? highlight
@@ -1150,31 +1210,48 @@ function PlayerRow({
           </span>
         </div>
       </div>
-      {isReady ? (
-        <div
-          className={cn(
-            "z-10 flex shrink-0 items-center gap-2 rounded-sm px-3 py-2 md:px-4",
-            "bg-linear-to-br from-[#ff8c00] to-[#ff6a00] text-[#2a1200]",
-            "shadow-[0_0_20px_rgba(255,140,0,0.35)]",
-          )}
-        >
-          <IconCheck className="size-4 shrink-0" stroke={2.5} aria-hidden />
-          <span className="text-[10px] font-bold tracking-[0.2em] uppercase">
-            READY
-          </span>
-        </div>
-      ) : (
-        <div
-          className={cn(
-            "flex shrink-0 items-center gap-2 rounded-sm border border-white/8 bg-[#252525] px-3 py-2 md:px-4",
-          )}
-        >
-          <IconClock className="size-4 text-[#888888]" stroke={1.5} />
-          <span className="text-[10px] font-bold tracking-[0.2em] text-[#888888] uppercase">
-            WAITING
-          </span>
-        </div>
-      )}
+      <div className="z-10 flex shrink-0 items-center gap-2">
+        {canKick ? (
+          <button
+            type="button"
+            onClick={onKick}
+            disabled={kickBusy}
+            className={cn(
+              "rounded-sm border border-[#c45c4a]/60 bg-[#2a1111]/80 px-3 py-2",
+              "text-[10px] font-bold tracking-[0.2em] text-[#f0c0b8] uppercase",
+              "transition-colors hover:bg-[#3a1515]",
+              "disabled:opacity-60",
+            )}
+          >
+            {kickBusy ? "KICKING" : "KICK"}
+          </button>
+        ) : null}
+        {isReady ? (
+          <div
+            className={cn(
+              "flex shrink-0 items-center gap-2 rounded-sm px-3 py-2 md:px-4",
+              "bg-linear-to-br from-[#ff8c00] to-[#ff6a00] text-[#2a1200]",
+              "shadow-[0_0_20px_rgba(255,140,0,0.35)]",
+            )}
+          >
+            <IconCheck className="size-4 shrink-0" stroke={2.5} aria-hidden />
+            <span className="text-[10px] font-bold tracking-[0.2em] uppercase">
+              READY
+            </span>
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "flex shrink-0 items-center gap-2 rounded-sm border border-white/8 bg-[#252525] px-3 py-2 md:px-4",
+            )}
+          >
+            <IconClock className="size-4 text-[#888888]" stroke={1.5} />
+            <span className="text-[10px] font-bold tracking-[0.2em] text-[#888888] uppercase">
+              WAITING
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
