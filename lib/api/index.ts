@@ -3,6 +3,7 @@ export {
   createLobby,
   getLobby,
   joinLobby,
+  kickPlayer,
   leaveLobby,
   lockLobby,
   quickPlay,
