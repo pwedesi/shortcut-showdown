@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  IconBell,
   IconCheck,
   IconClock,
   IconCopy,
@@ -10,7 +9,6 @@ import {
   IconPlayerPlayFilled,
   IconMinus,
   IconPlus,
-  IconSettings,
   IconAdjustments,
   IconUser,
   IconUsersGroup,
@@ -79,14 +77,12 @@ function LobbyShell({
   children,
   headerExtra,
   connLine,
-  reconnectSlot,
   onLeave,
   leaveDisabled,
 }: {
   children: ReactNode;
   headerExtra: ReactNode;
   connLine: string;
-  reconnectSlot?: ReactNode;
   onLeave: () => void;
   leaveDisabled: boolean;
 }) {
@@ -127,33 +123,12 @@ function LobbyShell({
             >
               MULTIPLAYER
             </span>
-            <a
-              className={cn(
-                "rounded px-3 py-2 transition-colors hover:bg-white/4",
-                shell.muted,
-                "hover:text-[#c4c2c0]",
-              )}
-              href="#"
-            >
-              RANKINGS
-            </a>
-            <a
-              className={cn(
-                "rounded px-3 py-2 transition-colors hover:bg-white/4",
-                shell.muted,
-                "hover:text-[#c4c2c0]",
-              )}
-              href="#"
-            >
-              STORAGE
-            </a>
           </nav>
         </div>
         <div className="flex items-center gap-2 text-sm text-[#ff8c00]">
           <span className="hidden max-w-56 truncate font-mono text-[10px] text-[#888] md:block">
             {connLine}
           </span>
-          {reconnectSlot}
           <button
             type="button"
             onClick={onLeave}
@@ -162,20 +137,7 @@ function LobbyShell({
           >
             Leave
           </button>
-          <button
-            type="button"
-            className="rounded-md p-2.5 transition-colors hover:bg-white/6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]"
-            aria-label="Settings"
-          >
-            <IconSettings className="size-6" stroke={1.5} />
-          </button>
-          <button
-            type="button"
-            className="rounded-md p-2.5 transition-colors hover:bg-white/6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]"
-            aria-label="Notifications"
-          >
-            <IconBell className="size-6" stroke={1.5} />
-          </button>
+          {/* Settings and notifications removed (non-functional) */}
         </div>
       </header>
       {children}
@@ -501,9 +463,7 @@ function LobbyClient() {
       return {
         ...prev,
         players: prev.players.map((p) =>
-          p.player_id === playerId
-            ? { ...p, is_ready: nextReady }
-            : p,
+          p.player_id === playerId ? { ...p, is_ready: nextReady } : p,
         ),
       };
     });
@@ -563,12 +523,17 @@ function LobbyClient() {
       const next = current + delta;
       if (next < 1 || next > 20) return;
       if (next < lobby.players.length && delta < 0) {
-        setActionError(`Cannot reduce max players below current member count (${lobby.players.length}).`);
+        setActionError(
+          `Cannot reduce max players below current member count (${lobby.players.length}).`,
+        );
         return;
       }
       setActionError(null);
       try {
-        await setMaxPlayers(lobbyId, { player_id: playerId, max_players: next });
+        await setMaxPlayers(lobbyId, {
+          player_id: playerId,
+          max_players: next,
+        });
         await refresh();
       } catch (e) {
         setActionError(formatApiErrorForUi(e));
@@ -657,9 +622,7 @@ function LobbyClient() {
       } catch (e) {
         setActionError(formatApiErrorForUi(e));
       } finally {
-        setKickBusyPlayerId((prev) =>
-          prev === targetPlayerId ? null : prev,
-        );
+        setKickBusyPlayerId((prev) => (prev === targetPlayerId ? null : prev));
       }
     },
     [lobbyId, playerId, lobby, refresh],
@@ -674,15 +637,6 @@ function LobbyClient() {
           router.push("/");
         }}
         leaveDisabled={false}
-        reconnectSlot={
-          <button
-            type="button"
-            onClick={reconnect}
-            className="hidden rounded border border-white/15 px-2 py-1 text-[10px] text-[#ff8c00] md:block"
-          >
-            Retry RT
-          </button>
-        }
       >
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="text-center text-[#c45c4a]">
@@ -698,14 +652,14 @@ function LobbyClient() {
   const maxP = getLobbyMaxPlayers(lobby);
   const count = lobby?.players?.length ?? 0;
   const leaderId = lobby ? getLobbyLeaderPlayerId(lobby) : null;
-  const isRoomLeader = Boolean(
-    playerId && leaderId && playerId === leaderId,
-  );
+  const isRoomLeader = Boolean(playerId && leaderId && playerId === leaderId);
   const nonLeaderPlayers = (lobby?.players ?? []).filter(
     (p) => p.player_id !== leaderId,
   );
   const allNonLeadersReady = nonLeaderPlayers.every((p) => p.is_ready === true);
-  const myRosterEntry = (lobby?.players ?? []).find((p) => p.player_id === playerId);
+  const myRosterEntry = (lobby?.players ?? []).find(
+    (p) => p.player_id === playerId,
+  );
   const isMeReady = Boolean(myRosterEntry?.is_ready);
   const access = getLobbyAccessDisplay(lobby, lobbyIdParam);
   const accessHeroIsLong = access.length > 12;
@@ -738,15 +692,6 @@ function LobbyClient() {
     <LobbyShell
       headerExtra={lobby ? `Status: ${lobby.status}` : "…"}
       connLine={connLine}
-      reconnectSlot={
-        <button
-          type="button"
-          onClick={reconnect}
-          className="hidden rounded border border-white/15 px-2 py-1 text-[10px] text-[#ff8c00] md:block"
-        >
-          Retry RT
-        </button>
-      }
       onLeave={onLeave}
       leaveDisabled={leaveBusy}
     >
@@ -794,67 +739,68 @@ function LobbyClient() {
                 className="pointer-events-none absolute bottom-0 left-0 h-0.5 w-full bg-linear-to-r from-transparent via-[#ff8c00] to-transparent shadow-[0_0_12px_rgba(255,140,0,0.5)]"
               />
               <div className="relative z-10 flex w-full max-w-full flex-col items-center">
-              <span
-                className={cn(
-                  "mb-3 font-sans text-[11px] font-semibold uppercase tracking-[0.35em]",
-                  shell.accent,
-                )}
-              >
-                {accessLabel}
-              </span>
-              <h1
-                className={cn(
-                  "max-w-full wrap-break-word text-center font-black text-white",
-                  accessHeroIsLong
-                    ? "font-mono text-base font-bold leading-snug tracking-tight sm:text-lg md:text-xl"
-                    : "font-sans text-4xl tracking-[-0.06em] sm:text-6xl md:text-8xl",
-                )}
-              >
-                {lobby ? access : "…"}
-              </h1>
-              {lobby && accessHeroIsLong ? (
-                <p
+                <span
                   className={cn(
-                    "mt-3 max-w-xs text-center font-sans text-[10px] leading-relaxed tracking-wide",
-                    shell.muted,
+                    "mb-3 font-sans text-[11px] font-semibold uppercase tracking-[0.35em]",
+                    shell.accent,
                   )}
                 >
-                  On the home screen, paste this id in Join, or open this page’s
-                  URL in the browser — short snippets of the id are not valid.
-                </p>
-              ) : null}
-              <button
-                type="button"
-                onClick={copyLink}
-                className={cn(
-                  "group relative z-10 mt-8 flex min-h-11 cursor-pointer items-center gap-2.5 rounded-sm px-3 py-2.5 transition-colors",
-                  "text-[#ff8c00] hover:bg-[#ff8c00]/10 hover:text-[#ffb366]",
-                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
-                )}
-              >
-                <span className="flex size-8 items-center justify-center rounded border border-[#ff8c00]/40 bg-[#ff8c00]/7 transition-transform group-hover:border-[#ff8c00]/60">
-                  <IconCopy className="size-4" stroke={1.5} aria-hidden />
+                  {accessLabel}
                 </span>
-                <span className="text-xs font-bold tracking-[0.25em]">
-                  {copied ? "COPIED" : "COPY ID"}
-                </span>
-              </button>
-              {copyError && lastCopyText ? (
-                <div className="mt-3 w-full max-w-[min(100%,20rem)] px-1">
-                  <p className="mb-1.5 text-center text-[10px] leading-relaxed text-[#e8a090]">
-                    {copyError}
+                <h1
+                  className={cn(
+                    "max-w-full wrap-break-word text-center font-black text-white",
+                    accessHeroIsLong
+                      ? "font-mono text-base font-bold leading-snug tracking-tight sm:text-lg md:text-xl"
+                      : "font-sans text-4xl tracking-[-0.06em] sm:text-6xl md:text-8xl",
+                  )}
+                >
+                  {lobby ? access : "…"}
+                </h1>
+                {lobby && accessHeroIsLong ? (
+                  <p
+                    className={cn(
+                      "mt-3 max-w-xs text-center font-sans text-[10px] leading-relaxed tracking-wide",
+                      shell.muted,
+                    )}
+                  >
+                    On the home screen, paste this id in Join, or open this
+                    page’s URL in the browser — short snippets of the id are not
+                    valid.
                   </p>
-                  <input
-                    type="text"
-                    readOnly
-                    aria-label="Lobby id to copy"
-                    className="w-full cursor-text select-all rounded-sm border border-white/10 bg-[#0a0a0a] px-2 py-2 font-mono text-[10px] text-[#e8e6e4] focus:border-[#ff8c00]/50 focus:outline-none"
-                    value={lastCopyText}
-                    onClick={(e) => e.currentTarget.select()}
-                    onFocus={(e) => e.currentTarget.select()}
-                  />
-                </div>
-              ) : null}
+                ) : null}
+                <button
+                  type="button"
+                  onClick={copyLink}
+                  className={cn(
+                    "group relative z-10 mt-8 flex min-h-11 cursor-pointer items-center gap-2.5 rounded-sm px-3 py-2.5 transition-colors",
+                    "text-[#ff8c00] hover:bg-[#ff8c00]/10 hover:text-[#ffb366]",
+                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
+                  )}
+                >
+                  <span className="flex size-8 items-center justify-center rounded border border-[#ff8c00]/40 bg-[#ff8c00]/7 transition-transform group-hover:border-[#ff8c00]/60">
+                    <IconCopy className="size-4" stroke={1.5} aria-hidden />
+                  </span>
+                  <span className="text-xs font-bold tracking-[0.25em]">
+                    {copied ? "COPIED" : "COPY ID"}
+                  </span>
+                </button>
+                {copyError && lastCopyText ? (
+                  <div className="mt-3 w-full max-w-[min(100%,20rem)] px-1">
+                    <p className="mb-1.5 text-center text-[10px] leading-relaxed text-[#e8a090]">
+                      {copyError}
+                    </p>
+                    <input
+                      type="text"
+                      readOnly
+                      aria-label="Lobby id to copy"
+                      className="w-full cursor-text select-all rounded-sm border border-white/10 bg-[#0a0a0a] px-2 py-2 font-mono text-[10px] text-[#e8e6e4] focus:border-[#ff8c00]/50 focus:outline-none"
+                      value={lastCopyText}
+                      onClick={(e) => e.currentTarget.select()}
+                      onFocus={(e) => e.currentTarget.select()}
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -876,18 +822,24 @@ function LobbyClient() {
                       ? String(lobby.challenge_count)
                       : "…"
                   }
-                  onIncrement={isRoomLeader ? () => onSetChallengeCount(1) : undefined}
-                  onDecrement={isRoomLeader ? () => onSetChallengeCount(-1) : undefined}
+                  onIncrement={
+                    isRoomLeader ? () => onSetChallengeCount(1) : undefined
+                  }
+                  onDecrement={
+                    isRoomLeader ? () => onSetChallengeCount(-1) : undefined
+                  }
                 />
                 <ParamCell
                   label="MAX PLAYERS"
                   value={
-                    lobby?.max_players != null
-                      ? String(lobby.max_players)
-                      : "…"
+                    lobby?.max_players != null ? String(lobby.max_players) : "…"
                   }
-                  onIncrement={isRoomLeader ? () => onSetMaxPlayers(1) : undefined}
-                  onDecrement={isRoomLeader ? () => onSetMaxPlayers(-1) : undefined}
+                  onIncrement={
+                    isRoomLeader ? () => onSetMaxPlayers(1) : undefined
+                  }
+                  onDecrement={
+                    isRoomLeader ? () => onSetMaxPlayers(-1) : undefined
+                  }
                 />
                 <ParamCell
                   label="ROUND (SEC)"
@@ -896,8 +848,12 @@ function LobbyClient() {
                       ? String(lobby.round_duration_seconds)
                       : "…"
                   }
-                  onIncrement={isRoomLeader ? () => onSetRoundDuration(10) : undefined}
-                  onDecrement={isRoomLeader ? () => onSetRoundDuration(-10) : undefined}
+                  onIncrement={
+                    isRoomLeader ? () => onSetRoundDuration(10) : undefined
+                  }
+                  onDecrement={
+                    isRoomLeader ? () => onSetRoundDuration(-10) : undefined
+                  }
                 />
                 <div className="border border-white/6 bg-[#0c0c0c] p-4">
                   <span
@@ -936,9 +892,7 @@ function LobbyClient() {
                     "font-mono text-[11px] font-semibold tracking-wide text-[#ff8c00]",
                   )}
                 >
-                  {lobby
-                    ? `${count}/${maxP} CONNECTED`
-                    : "LOADING…"}
+                  {lobby ? `${count}/${maxP} CONNECTED` : "LOADING…"}
                 </span>
               </div>
 
@@ -957,7 +911,9 @@ function LobbyClient() {
                     const disambiguated = needsSuffix
                       ? `${base} · ${shortPlayerId(pid, 4)}`
                       : base;
-                    const name = isYou ? `${disambiguated} (you)` : disambiguated;
+                    const name = isYou
+                      ? `${disambiguated} (you)`
+                      : disambiguated;
                     const canKick = isRoomLeader && !isYou;
                     return (
                       <PlayerRow
@@ -969,9 +925,7 @@ function LobbyClient() {
                         isReady={p.is_ready ?? false}
                         canKick={canKick}
                         kickBusy={kickBusyPlayerId === pid}
-                        onKick={
-                          canKick ? () => onKickPlayer(pid) : undefined
-                        }
+                        onKick={canKick ? () => onKickPlayer(pid) : undefined}
                       />
                     );
                   })}
@@ -1089,7 +1043,8 @@ function LobbyClient() {
             )}
             {playerId && lobby && !isRoomLeader && (
               <p className="text-center text-xs text-[#888888]">
-                Mark ready when you are set. Host can launch once everyone is ready.
+                Mark ready when you are set. Host can launch once everyone is
+                ready.
               </p>
             )}
           </div>
