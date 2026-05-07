@@ -204,6 +204,8 @@ function LobbyClient() {
   const [lastCopyText, setLastCopyText] = useState<string | null>(null);
   const autoJoinAttemptedRef = useRef(false);
   const navigatedToGameplayRef = useRef(false);
+  const hadJoinedRef = useRef(false);
+  const removedFromLobbyRef = useRef(false);
 
   const lobbyId = lobby?.id ?? lobbyIdParam;
 
@@ -213,6 +215,13 @@ function LobbyClient() {
 
   useEffect(() => {
     navigatedToGameplayRef.current = false;
+  }, [lobbyIdParam]);
+
+  useEffect(() => {
+    if (!lobbyIdParam) {
+      removedFromLobbyRef.current = false;
+      hadJoinedRef.current = false;
+    }
   }, [lobbyIdParam]);
 
   useEffect(() => {
@@ -287,6 +296,8 @@ function LobbyClient() {
    */
   useEffect(() => {
     if (!lobbyIdParam || !playerId || !lobby) return;
+    if (removedFromLobbyRef.current) return;
+    if (hadJoinedRef.current) return;
     if (lobbyHasPlayer(lobby, playerId)) return;
     if (autoJoinAttemptedRef.current) return;
     autoJoinAttemptedRef.current = true;
@@ -307,6 +318,22 @@ function LobbyClient() {
       cancelled = true;
     };
   }, [lobbyIdParam, playerId, lobby, refresh]);
+
+  useEffect(() => {
+    if (!lobby || !playerId) return;
+    const inLobby = lobbyHasPlayer(lobby, playerId);
+    if (inLobby) {
+      hadJoinedRef.current = true;
+      return;
+    }
+    if (!hadJoinedRef.current || removedFromLobbyRef.current) return;
+    removedFromLobbyRef.current = true;
+    setActionError("You were removed from the lobby.");
+    const t = window.setTimeout(() => {
+      router.push("/");
+    }, 1200);
+    return () => window.clearTimeout(t);
+  }, [lobby, playerId, router]);
 
   const navigateToGameplayForRoom = useCallback(
     (room: string) => {
