@@ -248,11 +248,12 @@ export function useGameplaySession({
     if (!roomId) {
       return;
     }
-    const interval =
-      status !== "connected" && status !== "connecting" ? 2000 : 5000;
+    if (status === "connected") {
+      return;
+    }
     const id = window.setInterval(() => {
       void loadRoom("poll");
-    }, interval);
+    }, 2000);
     return () => {
       window.clearInterval(id);
     };
