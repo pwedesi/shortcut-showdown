@@ -52,6 +52,7 @@ import {
   getLobbyMaxPlayers,
   hasServerShareCode,
   lobbyHasPlayer,
+  normalizeLobbyFromApi,
   shortPlayerId,
 } from "@/lib/lobby";
 import {
@@ -284,11 +285,14 @@ function LobbyClient() {
   useEffect(() => {
     if (!lobbyIdParam) return;
     void refresh();
+    if (status === "connected") {
+      return;
+    }
     const t = window.setInterval(() => {
       void refresh();
     }, POLL_MS);
     return () => window.clearInterval(t);
-  }, [lobbyIdParam, refresh]);
+  }, [lobbyIdParam, refresh, status]);
 
   /**
    * Invite links open `/lobby?id=…` without home "Join". Register this client via POST /join
@@ -373,6 +377,24 @@ function LobbyClient() {
         if (name === "connect" || !name) {
           return;
         }
+        if (name === "lobby_updated" || name === "lobby_snapshot") {
+          const body = mergeServerMessageBody(data);
+          const payloadLobby =
+            typeof body.lobby === "object" && body.lobby !== null
+              ? body.lobby
+              : body;
+          const next = normalizeLobbyFromApi(payloadLobby);
+          const nextId = next.id.trim();
+          const expected = lobbyIdParam ?? lobbyId ?? "";
+          if (nextId && expected && nextId !== expected) {
+            return;
+          }
+          if (nextId) {
+            setLobby(next);
+            setLastPoll(Date.now());
+          }
+          return;
+        }
         if (
           name !== "room_snapshot" &&
           name !== "challenges" &&
@@ -406,7 +428,7 @@ function LobbyClient() {
         }
         navigateToGameplayForRoom(room);
       },
-      [navigateToGameplayForRoom],
+      [lobbyIdParam, lobbyId, navigateToGameplayForRoom],
     ),
   );
 
