@@ -1,4 +1,4 @@
-name: "PR CI"
+name: PR CI
 
 on:
   pull_request:
@@ -8,99 +8,57 @@ on:
 
 jobs:
   lint:
-    name: Lint
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [18]
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
         with:
-          node-version: ${{ matrix.node-version }}
-          cache: "pnpm"
-          cache-dependency-path: pnpm-lock.yaml
+          version: 9
 
-      - name: Enable Corepack
-        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: pnpm
 
-      - name: Prepare pnpm with Corepack
-        run: corepack prepare pnpm@latest --activate
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run linter
-        run: pnpm lint
-        env:
-          CI: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
 
   test:
-    name: Test
     needs: lint
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [18]
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
         with:
-          node-version: ${{ matrix.node-version }}
-          cache: "pnpm"
-          cache-dependency-path: pnpm-lock.yaml
+          version: 9
 
-      - name: Enable Corepack
-        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: pnpm
 
-      - name: Prepare pnpm with Corepack
-        run: corepack prepare pnpm@latest --activate
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run tests
-        run: pnpm test
-        env:
-          CI: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
 
   build:
-    name: Build
     needs: test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [18]
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
         with:
-          node-version: ${{ matrix.node-version }}
-          cache: "pnpm"
-          cache-dependency-path: pnpm-lock.yaml
+          version: 9
 
-      - name: Enable Corepack
-        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: pnpm
 
-      - name: Prepare pnpm with Corepack
-        run: corepack prepare pnpm@latest --activate
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-        env:
-          CI: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
