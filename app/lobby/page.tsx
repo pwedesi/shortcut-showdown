@@ -339,6 +339,17 @@ function LobbyClient() {
         if (name === "connect" || !name) {
           return;
         }
+        if (name === "kicked_from_lobby") {
+          const body = mergeServerMessageBody(data);
+          const lid = typeof body.lobby_id === "string" ? body.lobby_id : undefined;
+          if (lid && (lobbyIdParam ?? lobbyId) === lid) {
+            // Mark removal and show immediate feedback, then navigate home
+            removedFromLobbyRef.current = true;
+            setActionError((body && typeof body.message === "string") ? body.message : "You were removed from the lobby.");
+            window.setTimeout(() => router.push("/"), 800);
+          }
+          return;
+        }
         if (name === "lobby_updated" || name === "lobby_snapshot") {
           const body = mergeServerMessageBody(data);
           const payloadLobby =
