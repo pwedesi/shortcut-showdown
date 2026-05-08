@@ -1,6 +1,6 @@
 "use client";
 
-import { IconBell, IconBolt, IconHome, IconUser } from "@tabler/icons-react";
+import { IconHome, IconUser, IconLogout } from "@tabler/icons-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -13,6 +13,7 @@ import {
 } from "react";
 import { keysFromKeyboardEvent } from "@/lib/gameplay/keysFromKeyboard";
 import { useGameplaySession } from "@/lib/gameplay/useGameplaySession";
+import { leaveLobby } from "@/lib/api";
 import { usePlayerConnection } from "@/lib/realtime/playerConnection";
 
 function clamp(value: number, min: number, max: number): number {
@@ -48,6 +49,8 @@ export function GameplayClient() {
   const searchParams = useSearchParams();
   const roomId = searchParams.get("room")?.trim() ?? "";
   const { status, playerId, lastError, reconnect } = usePlayerConnection();
+  const lobbyId = searchParams.get("lobby")?.trim() ?? "";
+  const [leaveBusy, setLeaveBusy] = useState(false);
 
   const navigatedRef = useRef(false);
 
@@ -78,9 +81,7 @@ export function GameplayClient() {
   const [feedback, setFeedback] = useState<"idle" | "success" | "error">(
     "idle",
   );
-  const resetFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const resetFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -201,12 +202,8 @@ export function GameplayClient() {
     });
   }, [playerId, session.gameState, session.roomView?.players]);
 
-  const wpm = session.myProgress
-    ? Math.round(session.myProgress.wpm)
-    : 0;
-  const acc = session.myProgress
-    ? session.myProgress.accuracy
-    : 0;
+  const wpm = session.myProgress ? Math.round(session.myProgress.wpm) : 0;
+  const acc = session.myProgress ? session.myProgress.accuracy : 0;
   const streak = session.myProgress ? session.myProgress.streak : 0;
 
   const inputVisualClass =
@@ -281,6 +278,22 @@ export function GameplayClient() {
     );
   }
 
+  async function handleQuit() {
+    if (!lobbyId || !playerId) {
+      router.push("/");
+      return;
+    }
+    setLeaveBusy(true);
+    try {
+      await leaveLobby(lobbyId, { player_id: playerId });
+    } catch (e) {
+      // ignore errors, still navigate home
+    } finally {
+      setLeaveBusy(false);
+      router.push("/");
+    }
+  }
+
   return (
     <div className="relative min-h-svh bg-[#0e0e0e] text-[#e5e2e1] selection:bg-[#ff6d00] selection:text-[#341100]">
       <div
@@ -297,27 +310,25 @@ export function GameplayClient() {
           {syncLabel} RT: {status}
         </p>
 
-        <div className="flex items-center gap-3 text-[#ff6d00]">
+        <div className="ml-4 flex items-center">
           <button
             type="button"
-            aria-label="Notifications"
-            className="rounded-sm p-1.5 transition-colors hover:text-[#ffb692]"
+            onClick={() => void handleQuit()}
+            disabled={leaveBusy}
+            aria-label="Quit match"
+            className="inline-flex items-center gap-2 rounded-md border border-[#2b2b2b] bg-transparent px-3 py-2 text-sm text-[#ffb692] hover:bg-[#1f1f1f] hover:shadow-[0_4px_20px_rgba(255,109,0,0.06)] disabled:opacity-50"
           >
-            <IconBell className="size-5" />
-          </button>
-          <button
-            type="button"
-            aria-label="Powerups"
-            className="rounded-sm p-1.5 transition-colors hover:text-[#ffb692]"
-          >
-            <IconBolt className="size-5" />
+            <IconLogout className="size-4" aria-hidden />
+            <span className="hidden md:inline">Quit</span>
           </button>
         </div>
       </nav>
 
       {session.syncMode === "reconnecting" && (
         <div className="flex flex-col items-center gap-1 border-b border-[#594136] bg-[#1c1b1b] px-4 py-2 text-center text-xs text-[#ffcf8f] sm:flex-row sm:justify-center sm:gap-3">
-          <span>Reconnecting to realtime — match state refreshes on a timer.</span>
+          <span>
+            Reconnecting to realtime — match state refreshes on a timer.
+          </span>
           <button
             type="button"
             onClick={session.onReconnectSync}
@@ -451,7 +462,9 @@ export function GameplayClient() {
                 >
                   <IconUser
                     className={
-                      lane.you ? "size-5 text-[#ffcf8f]" : "size-5 text-[#a98a7c]"
+                      lane.you
+                        ? "size-5 text-[#ffcf8f]"
+                        : "size-5 text-[#a98a7c]"
                     }
                   />
                 </div>

@@ -177,3 +177,20 @@ export async function setRoundDuration(
   );
   return normalizeLobbyFromApi(data);
 }
+
+/** POST /lobbies/{lobby_id}/kick */
+export async function kickPlayer(
+  lobbyId: string,
+  body: { player_id: string; target_player_id: string },
+  options?: { signal?: AbortSignal },
+): Promise<Lobby> {
+  const data = await apiRequest<unknown>(
+    `/lobbies/${encodeSegment(lobbyId)}/kick`,
+    {
+      method: "POST",
+      body,
+      signal: options?.signal,
+    },
+  );
+  return normalizeLobbyFromApi(data);
+}
