@@ -3,7 +3,6 @@
 import {
   IconGauge,
   IconHome,
-  IconPlayerPlayFilled,
   IconUsersPlus,
   IconCheck,
   IconX,
@@ -11,9 +10,15 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ApiError, acceptRematch, declineRematch, type MatchResultsView } from "@/lib/api";
+import {
+  ApiError,
+  acceptRematch,
+  declineRematch,
+  createRematch,
+  type MatchResultsView,
+} from "@/lib/api";
 import { formatApiErrorForUi } from "@/lib/api/errors";
-import { usePlayerConnection, useWebSocketMessageListener } from "@/lib/realtime/playerConnection";
+import { usePlayerConnection } from "@/lib/realtime/playerConnection";
 import { fetchMatchResultsWithRetry } from "@/lib/results/fetchMatchResultsWithRetry";
 import {
   findPlacementForPlayer,
@@ -70,7 +75,24 @@ export function ResultsClient() {
   }>({});
   const [pendingPlayers, setPendingPlayers] = useState<string[]>([]);
 
-  const { status, playerId: wsPlayerId, sendWebSocketJson } = usePlayerConnection();
+  let status: "connected" | "disconnected" | "connecting" = "disconnected";
+  let wsPlayerId: string | null = null;
+  let sendWebSocketJson = (_: unknown) => {};
+  let conn: {
+    status: "connected" | "disconnected" | "connecting";
+    playerId: string | null;
+    subscribeMessages?: (cb: (d: unknown) => void) => () => void;
+    sendWebSocketJson: (body: unknown) => boolean;
+  } | null = null;
+  try {
+    const c = usePlayerConnection();
+    conn = c;
+    status = c.status;
+    wsPlayerId = c.playerId;
+    sendWebSocketJson = c.sendWebSocketJson;
+  } catch (err) {
+    // If the provider is not present (e.g., in unit tests), fall back to no-op
+  }
 
   useEffect(() => {
     if (status === "connected" && roomId && wsPlayerId) {
@@ -81,24 +103,39 @@ export function ResultsClient() {
     }
   }, [status, roomId, wsPlayerId, sendWebSocketJson]);
 
-  useWebSocketMessageListener(
-    useCallback(
-      (data: any) => {
-        if (data.type === "rematch_ready") {
-          const { next_lobby_id } = data.payload;
-          router.push(`/lobby?id=${next_lobby_id}`);
-        } else if (data.type === "rematch_acceptance_update") {
-          const { acceptances, pending_players } = data.payload;
+  const subscribeMessages = conn?.subscribeMessages;
+  useEffect(() => {
+    if (!subscribeMessages) return;
+    const unsub = subscribeMessages((data: unknown) => {
+      if (typeof data === "object" && data !== null && "type" in data) {
+        const typed = data as { type: string; payload?: unknown };
+        if (typed.type === "rematch_ready") {
+          const payload = typed.payload as
+            | { next_lobby_id?: string }
+            | undefined;
+          const next_lobby_id = payload?.next_lobby_id;
+          if (next_lobby_id) router.push(`/lobby?id=${next_lobby_id}`);
+        } else if (typed.type === "rematch_acceptance_update") {
+          const payload = typed.payload as
+            | {
+                acceptances?: Record<string, boolean>;
+                pending_players?: string[];
+              }
+            | undefined;
+          const acceptances = payload?.acceptances ?? {};
+          const pending_players = payload?.pending_players ?? [];
           setRematchAcceptances(acceptances);
           setPendingPlayers(pending_players);
-        } else if (data.type === "rematch_declined") {
-          const { player_id } = data.payload;
-          setRematchAcceptances((prev) => ({ ...prev, [player_id]: false }));
+        } else if (typed.type === "rematch_declined") {
+          const payload = typed.payload as { player_id?: string } | undefined;
+          const player_id = payload?.player_id;
+          if (player_id)
+            setRematchAcceptances((prev) => ({ ...prev, [player_id]: false }));
         }
-      },
-      [router],
-    ),
-  );
+      }
+    });
+    return unsub;
+  }, [subscribeMessages, router]);
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -168,7 +205,9 @@ export function ResultsClient() {
   async function onAcceptRematch() {
     if (!roomId || !playerId) {
       setRematchState("error");
-      setRematchError("Missing player id. Reopen results from the game client.");
+      setRematchError(
+        "Missing player id. Reopen results from the game client.",
+      );
       return;
     }
     setRematchState("accepting");
@@ -177,7 +216,7 @@ export function ResultsClient() {
       const res = await acceptRematch(roomId, { player_id: playerId });
       setRematchAcceptances((prev) => ({ ...prev, [playerId]: true }));
       setPendingPlayers(res.pending_players);
-      
+
       if (res.all_accepted) {
         // All players accepted, navigate to rematch lobby
         // Note: rematch_ready event from WebSocket will redirect us
@@ -194,7 +233,9 @@ export function ResultsClient() {
   async function onDeclineRematch() {
     if (!roomId || !playerId) {
       setRematchState("error");
-      setRematchError("Missing player id. Reopen results from the game client.");
+      setRematchError(
+        "Missing player id. Reopen results from the game client.",
+      );
       return;
     }
     setRematchState("declined");
@@ -203,6 +244,29 @@ export function ResultsClient() {
       const res = await declineRematch(roomId, { player_id: playerId });
       setRematchAcceptances((prev) => ({ ...prev, [playerId]: false }));
       setPendingPlayers(res.pending_players);
+    } catch (e) {
+      setRematchState("error");
+      setRematchError(rematchMessage(e));
+    }
+  }
+
+  async function onCreateRematch() {
+    if (!roomId || !playerId) {
+      setRematchState("error");
+      setRematchError(
+        "Missing player id. Reopen results from the game client.",
+      );
+      return;
+    }
+    setRematchState("accepting");
+    setRematchError(null);
+    try {
+      const res = await createRematch(roomId, { player_id: playerId });
+      if (res.next_lobby_id) {
+        router.push(`/lobby?id=${res.next_lobby_id}`);
+        return;
+      }
+      setRematchState("idle");
     } catch (e) {
       setRematchState("error");
       setRematchError(rematchMessage(e));
@@ -516,7 +580,8 @@ export function ResultsClient() {
                 </p>
                 {pendingPlayers.length > 0 ? (
                   <p className="text-center text-xs text-[#ffb692]">
-                    Waiting for {pendingPlayers.length} player{pendingPlayers.length !== 1 ? "s" : ""}…
+                    Waiting for {pendingPlayers.length} player
+                    {pendingPlayers.length !== 1 ? "s" : ""}…
                   </p>
                 ) : (
                   <p className="text-center text-xs text-[#81c784]">
@@ -530,7 +595,16 @@ export function ResultsClient() {
               </p>
             )}
 
-            <div className="grid grid-cols-[1fr_auto] gap-3">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-3">
+              <button
+                type="button"
+                disabled={rematchState === "accepting"}
+                onClick={() => void onCreateRematch()}
+                className="flex items-center justify-center gap-2 rounded-sm border border-[#2b2b2b] bg-[#07201a] px-4 py-3 text-sm font-bold tracking-[0.12em] text-[#81c784] uppercase transition hover:bg-[#07201a]/80 disabled:opacity-50"
+              >
+                Rematch
+              </button>
+
               <button
                 type="button"
                 onClick={onNewLobby}
