@@ -77,12 +77,14 @@ function LobbyShell({
   children,
   headerExtra,
   connLine,
+  reconnectSlot,
   onLeave,
   leaveDisabled,
 }: {
   children: ReactNode;
   headerExtra: ReactNode;
   connLine: string;
+  reconnectSlot?: ReactNode;
   onLeave: () => void;
   leaveDisabled: boolean;
 }) {
@@ -129,6 +131,7 @@ function LobbyShell({
           <span className="hidden max-w-56 truncate font-mono text-[10px] text-[#888] md:block">
             {connLine}
           </span>
+          {reconnectSlot}
           <button
             type="button"
             onClick={onLeave}

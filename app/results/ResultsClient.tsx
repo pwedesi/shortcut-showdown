@@ -18,7 +18,10 @@ import {
   type MatchResultsView,
 } from "@/lib/api";
 import { formatApiErrorForUi } from "@/lib/api/errors";
-import { usePlayerConnection } from "@/lib/realtime/playerConnection";
+import {
+  usePlayerConnection,
+  type PlayerConnectionStatus,
+} from "@/lib/realtime/playerConnection";
 import { fetchMatchResultsWithRetry } from "@/lib/results/fetchMatchResultsWithRetry";
 import {
   findPlacementForPlayer,
@@ -75,14 +78,15 @@ export function ResultsClient() {
   }>({});
   const [pendingPlayers, setPendingPlayers] = useState<string[]>([]);
 
-  let status: "connected" | "disconnected" | "connecting" = "disconnected";
+  let status: PlayerConnectionStatus = "disconnected";
   let wsPlayerId: string | null = null;
-  let sendWebSocketJson = (_: unknown) => {};
+  let sendWebSocketJson: (body: Record<string, unknown>) => boolean = () =>
+    false;
   let conn: {
-    status: "connected" | "disconnected" | "connecting";
+    status: PlayerConnectionStatus;
     playerId: string | null;
     subscribeMessages?: (cb: (d: unknown) => void) => () => void;
-    sendWebSocketJson: (body: unknown) => boolean;
+    sendWebSocketJson: (body: Record<string, unknown>) => boolean;
   } | null = null;
   try {
     const c = usePlayerConnection();
