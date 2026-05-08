@@ -341,11 +341,16 @@ function LobbyClient() {
         }
         if (name === "kicked_from_lobby") {
           const body = mergeServerMessageBody(data);
-          const lid = typeof body.lobby_id === "string" ? body.lobby_id : undefined;
+          const lid =
+            typeof body.lobby_id === "string" ? body.lobby_id : undefined;
           if (lid && (lobbyIdParam ?? lobbyId) === lid) {
             // Mark removal and show immediate feedback, then navigate home
             removedFromLobbyRef.current = true;
-            setActionError((body && typeof body.message === "string") ? body.message : "You were removed from the lobby.");
+            setActionError(
+              body && typeof body.message === "string"
+                ? body.message
+                : "You were removed from the lobby.",
+            );
             window.setTimeout(() => router.push("/"), 800);
           }
           return;
@@ -1094,12 +1099,7 @@ function LobbyClient() {
 
 function LobbyLoading() {
   return (
-    <LobbyShell
-      headerExtra="…"
-      connLine="…"
-      onLeave={() => {}}
-      leaveDisabled
-    >
+    <LobbyShell headerExtra="…" connLine="…" onLeave={() => {}} leaveDisabled>
       <main className="flex flex-1 items-center justify-center p-8 text-[#888]">
         Loading…
       </main>
