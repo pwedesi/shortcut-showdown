@@ -77,14 +77,12 @@ function LobbyShell({
   children,
   headerExtra,
   connLine,
-  reconnectSlot,
   onLeave,
   leaveDisabled,
 }: {
   children: ReactNode;
   headerExtra: ReactNode;
   connLine: string;
-  reconnectSlot?: ReactNode;
   onLeave: () => void;
   leaveDisabled: boolean;
 }) {
@@ -131,7 +129,6 @@ function LobbyShell({
           <span className="hidden max-w-56 truncate font-mono text-[10px] text-[#888] md:block">
             {connLine}
           </span>
-          {reconnectSlot}
           <button
             type="button"
             onClick={onLeave}
@@ -340,6 +337,22 @@ function LobbyClient() {
         }
         const name = getMessageEventName(data);
         if (name === "connect" || !name) {
+          return;
+        }
+        if (name === "kicked_from_lobby") {
+          const body = mergeServerMessageBody(data);
+          const lid =
+            typeof body.lobby_id === "string" ? body.lobby_id : undefined;
+          if (lid && (lobbyIdParam ?? lobbyId) === lid) {
+            // Mark removal and show immediate feedback, then navigate home
+            removedFromLobbyRef.current = true;
+            setActionError(
+              body && typeof body.message === "string"
+                ? body.message
+                : "You were removed from the lobby.",
+            );
+            window.setTimeout(() => router.push("/"), 800);
+          }
           return;
         }
         if (name === "lobby_updated" || name === "lobby_snapshot") {
@@ -1086,13 +1099,7 @@ function LobbyClient() {
 
 function LobbyLoading() {
   return (
-    <LobbyShell
-      headerExtra="…"
-      connLine="…"
-      onLeave={() => {}}
-      leaveDisabled
-      reconnectSlot={null}
-    >
+    <LobbyShell headerExtra="…" connLine="…" onLeave={() => {}} leaveDisabled>
       <main className="flex flex-1 items-center justify-center p-8 text-[#888]">
         Loading…
       </main>
