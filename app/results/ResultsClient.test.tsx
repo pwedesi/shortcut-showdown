@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ResultsClient } from "@/app/results/ResultsClient";
+import { PlayerConnectionProvider } from "@/lib/realtime/playerConnection";
 import type { MatchResultsView } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/types";
 
@@ -16,7 +17,12 @@ vi.mock("next/navigation", () => ({
 }));
 
 const fetchResults = vi.fn();
-const rematchApi = vi.fn();
+const acceptRematchApi = vi.fn();
+const declineRematchApi = vi.fn();
+
+vi.mock("@/lib/config", () => ({
+  getWebSocketFullUrl: () => "ws://test/ws",
+}));
 
 vi.mock("@/lib/results/fetchMatchResultsWithRetry", () => ({
   fetchMatchResultsWithRetry: (...args: unknown[]) => fetchResults(...args),
@@ -24,8 +30,55 @@ vi.mock("@/lib/results/fetchMatchResultsWithRetry", () => ({
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, createRematch: (...a: unknown[]) => rematchApi(...a) };
+  return {
+    ...actual,
+    acceptRematch: (...a: unknown[]) => acceptRematchApi(...a),
+    declineRematch: (...a: unknown[]) => declineRematchApi(...a),
+  };
 });
+
+class MockWebSocket {
+  static instances: MockWebSocket[] = [];
+  static OPEN = 1;
+  static CONNECTING = 0;
+
+  url: string;
+  readyState = MockWebSocket.CONNECTING;
+  onopen: (() => void) | null = null;
+  onmessage: ((ev: { data: string }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+
+  constructor(url: string) {
+    this.url = url;
+    MockWebSocket.instances.push(this);
+    queueMicrotask(() => {
+      this.readyState = MockWebSocket.OPEN;
+      this.onopen?.();
+      this.emit({ type: "connect", payload: { player_id: "p1" } });
+    });
+  }
+
+  send() {}
+
+  close() {
+    this.readyState = 3;
+  }
+
+  emit(payload: unknown) {
+    this.onmessage?.({ data: JSON.stringify(payload) });
+  }
+}
+
+const OriginalWebSocket = globalThis.WebSocket;
+
+function renderClient() {
+  return render(
+    <PlayerConnectionProvider>
+      <ResultsClient />
+    </PlayerConnectionProvider>,
+  );
+}
 
 const sampleResults: MatchResultsView = {
   room_id: "room-a",
@@ -86,17 +139,21 @@ describe("ResultsClient", () => {
     push.mockReset();
     replace.mockReset();
     fetchResults.mockReset();
-    rematchApi.mockReset();
+    acceptRematchApi.mockReset();
+    declineRematchApi.mockReset();
     searchParams = new URLSearchParams("room=room-a&player=p1");
     fetchResults.mockResolvedValue(sampleResults);
+    MockWebSocket.instances = [];
+    globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    globalThis.WebSocket = OriginalWebSocket;
   });
 
   it("renders podium and telemetry from session data", async () => {
-    render(<ResultsClient />);
+    renderClient();
     await waitFor(() => {
       expect(screen.getByText("First")).toBeInTheDocument();
     });
@@ -105,29 +162,37 @@ describe("ResultsClient", () => {
   });
 
   it("navigates to rematch lobby on success", async () => {
-    rematchApi.mockResolvedValue({
+    acceptRematchApi.mockResolvedValue({
       room_id: "room-a",
-      next_lobby_id: "lobby-new",
+      accepted_by: ["p1"],
+      pending_players: [],
+      all_accepted: true,
     });
-    render(<ResultsClient />);
-    await waitFor(() => screen.findByRole("button", { name: /rematch/i }));
-    await userEvent.click(screen.getByRole("button", { name: /rematch/i }));
+    renderClient();
+    await waitFor(() => screen.findByRole("button", { name: /accept/i }));
+    await userEvent.click(screen.getByRole("button", { name: /accept/i }));
     await waitFor(() => {
-      expect(rematchApi).toHaveBeenCalledWith("room-a", { player_id: "p1" });
+      expect(acceptRematchApi).toHaveBeenCalledWith("room-a", { player_id: "p1" });
+    });
+
+    const ws = MockWebSocket.instances.at(-1);
+    ws?.emit({ type: "rematch_ready", payload: { next_lobby_id: "lobby-new" } });
+
+    await waitFor(() => {
       expect(push).toHaveBeenCalledWith("/lobby?id=lobby-new");
     });
   });
 
   it("shows rematch failure and allows new lobby path", async () => {
-    rematchApi.mockRejectedValue(
+    acceptRematchApi.mockRejectedValue(
       new ApiError("rematch_roster_changed", {
         code: "conflict",
         status: 409,
       }),
     );
-    render(<ResultsClient />);
-    await waitFor(() => screen.findByRole("button", { name: /rematch/i }));
-    await userEvent.click(screen.getByRole("button", { name: /rematch/i }));
+    renderClient();
+    await waitFor(() => screen.findByRole("button", { name: /accept/i }));
+    await userEvent.click(screen.getByRole("button", { name: /accept/i }));
     await waitFor(() => {
       expect(
         screen.getByText(/player left the match/i),
@@ -140,7 +205,7 @@ describe("ResultsClient", () => {
       await import("@/lib/session/resultsContext"),
       "clearPersistedResultsContext",
     );
-    render(<ResultsClient />);
+    renderClient();
     await waitFor(() => screen.findByRole("button", { name: /new lobby/i }));
     await userEvent.click(screen.getByRole("button", { name: /new lobby/i }));
     expect(clear).toHaveBeenCalled();
@@ -152,17 +217,29 @@ describe("ResultsClient", () => {
 describe("ResultsClient journey — reload results after rematch cycle", () => {
   beforeEach(() => {
     push.mockReset();
+    replace.mockReset();
     fetchResults.mockReset();
-    rematchApi.mockReset();
+    acceptRematchApi.mockReset();
+    declineRematchApi.mockReset();
     searchParams = new URLSearchParams("room=room-a&player=p1");
+    MockWebSocket.instances = [];
+    globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+  });
+
+  afterEach(() => {
+    globalThis.WebSocket = OriginalWebSocket;
   });
 
   it("fetches results again when room query changes", async () => {
     fetchResults.mockResolvedValue(sampleResults);
-    const { rerender } = render(<ResultsClient />);
+    const { rerender } = renderClient();
     await waitFor(() => expect(fetchResults).toHaveBeenCalledTimes(1));
     searchParams = new URLSearchParams("room=room-b&player=p1");
-    rerender(<ResultsClient />);
+    rerender(
+      <PlayerConnectionProvider>
+        <ResultsClient />
+      </PlayerConnectionProvider>,
+    );
     await waitFor(() => expect(fetchResults).toHaveBeenCalledTimes(2));
   });
 });
