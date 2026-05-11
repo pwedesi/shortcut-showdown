@@ -1,5 +1,38 @@
 # Shortcut Showdown API
 
+```mermaid
+flowchart TB
+    subgraph Clients["Game Clients"]
+        C1["Player 1<br/>(Browser)"]
+        C2["Player 2<br/>(Browser)"]
+        CN["Player N<br/>(Browser)"]
+    end
+
+    subgraph Vercel["Vercel (Edge)"]
+        FE["Next.js 16 App Router<br/>React 19 + Tailwind<br/>WS client + REST fallback"]
+    end
+
+    subgraph Render["Render (Origin)"]
+        BE["FastAPI ASGI Server<br/>uvicorn worker<br/>(single instance)"]
+    end
+
+    C1 -->|HTTPS<br/>page loads| FE
+    C2 -->|HTTPS<br/>page loads| FE
+    CN -->|HTTPS<br/>page loads| FE
+
+    FE -.->|REST snapshots<br/>fallback only| BE
+    C1 ===|"WSS /ws<br/>(primary realtime)"| BE
+    C2 ===|"WSS /ws<br/>(primary realtime)"| BE
+    CN ===|"WSS /ws<br/>(primary realtime)"| BE
+
+    classDef client fill:#dbeafe,stroke:#1e40af
+    classDef edge fill:#fef3c7,stroke:#a16207
+    classDef origin fill:#dcfce7,stroke:#15803d
+    class C1,C2,CN client
+    class FE edge
+    class BE origin
+```
+
 Backend and HTTP surface for **Shortcut Showdown**, implemented with the [Next.js](https://nextjs.org) App Router. The stack uses **TypeScript**, **React 19**, and **Tailwind CSS** for any app-facing routes and tooling.
 
 ## Requirements
