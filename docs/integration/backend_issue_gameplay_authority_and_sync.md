@@ -48,6 +48,11 @@ The gameplay screen is a real-time “race” with objectives, per-player progre
 5. **Determinism**  
    - Document how ties are broken, whether AI/bots exist, and RNG usage if any (must be server-side and seeded or avoided).
 
+## Concurrency model
+
+- The authoritative server partitions concurrent access by room: the `GameEngine` shards a global lock into a per-room mapping (e.g. `dict[str, asyncio.Lock]`) so operations against different rooms can proceed without blocking each other. This reduces contention under multi-room load while keeping per-room state consistent.
+- Global registries (connection manager, lobby manager, room registry) remain protected by their own global locks because they guard cross-room data structures. When writing code that touches both global registries and a room's state, preserve a consistent lock acquisition order (acquire the global/manager lock first, then the room-specific lock) to avoid deadlocks.
+
 ## Acceptance criteria
 
 - [ ] Documented public contract for `game_state` (JSON schema or OpenAPI `components/schemas`).
