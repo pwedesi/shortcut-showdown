@@ -21,6 +21,8 @@ The web app is implemented against the FastAPI `shortcut-showdown-api` in a sibl
 - Round clock uses `round_ends_at` and `server_time` with local wall time to estimate remaining seconds ([remainingSeconds](../../lib/gameplay/remainingSeconds.ts)), not a purely local fake countdown.
 - Merging remote snapshots always prefers the higher `state_version` ([mergeGameStateView](../../lib/gameplay/mergeGameStateView.ts)).
 
+- Concurrency model: the server serializes updates at the room level. `GameEngine` uses per-room locks so concurrent activity in different rooms does not block; however, global registries (connections, lobbies, rooms) remain guarded by global locks. Client and server code should avoid holding multiple locks in inconsistent order to prevent deadlocks.
+
 ## Gaps and limitations (no backend changes in this phase)
 
 - **WebSocket drop:** the API removes the player from the room and may forfeit the match on disconnect. A new WebSocket connection receives a new `player_id`; there is no token to resume the pre-drop identity from the browser alone. Polling and `GET /game-rooms` still return **public** state, but `POST` attempts need the same `player_id` that the server still associates with the room; after a full disconnect, that identity is typically lost.
