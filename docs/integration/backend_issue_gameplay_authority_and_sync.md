@@ -50,8 +50,8 @@ The gameplay screen is a real-time “race” with objectives, per-player progre
 
 ## Concurrency model
 
-- The authoritative server partitions concurrent access by room: the `GameEngine` shards a global lock into a per-room mapping (e.g. `dict[str, asyncio.Lock]`) so operations against different rooms can proceed without blocking each other. This reduces contention under multi-room load while keeping per-room state consistent.
-- Global registries (connection manager, lobby manager, room registry) remain protected by their own global locks because they guard cross-room data structures. When writing code that touches both global registries and a room's state, preserve a consistent lock acquisition order (acquire the global/manager lock first, then the room-specific lock) to avoid deadlocks.
+- **Recommended approach:** the authoritative server should partition concurrent access by room. For example, the `GameEngine` could shard a global lock into a per-room mapping (e.g. `dict[str, asyncio.Lock]`) so operations against different rooms can proceed without blocking each other. This should reduce contention under multi-room load while keeping per-room state consistent.
+- Global registries (connection manager, lobby manager, room registry) should remain protected by their own global locks because they guard cross-room data structures. Code that touches both global registries and a room's state should preserve a consistent lock acquisition order (for example, acquire the global/manager lock first, then the room-specific lock) to avoid deadlocks.
 
 ## Acceptance criteria
 
