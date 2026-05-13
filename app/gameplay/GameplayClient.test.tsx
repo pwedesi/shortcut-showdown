@@ -85,6 +85,28 @@ function gameRoomJson() {
   };
 }
 
+function limboRoomJson() {
+  return {
+    ...gameRoomJson(),
+    game_state: {
+      ...gameRoomJson().game_state,
+      objective_count: 1,
+      players: {
+        [playerWsId]: {
+          ...gameRoomJson().game_state.players[playerWsId],
+          objective_index: 1,
+          progress_percent: 100,
+        },
+      },
+      finished: false,
+      winner_player_id: null,
+      draw: false,
+      end_reason: null,
+      finished_at: null,
+    },
+  };
+}
+
 describe("GameplayClient", () => {
   const Original = globalThis.WebSocket;
 
@@ -122,6 +144,33 @@ describe("GameplayClient", () => {
     await waitFor(() => {
       expect(screen.getByText(/Copy selected text/i)).toBeInTheDocument();
     });
+  });
+
+  it("shows limbo when the player runs out of challenges before the match ends", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo) => {
+        const u = String(input);
+        if (u.includes(`/game-rooms/${encodeURIComponent(ROOM)}`) && !u.includes("attempts")) {
+          return new Response(JSON.stringify(limboRoomJson()), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response("bad", { status: 500 });
+      }),
+    );
+
+    render(
+      <PlayerConnectionProvider>
+        <GameplayClient />
+      </PlayerConnectionProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/No more challenges/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Awaiting other drivers/i)).toBeInTheDocument();
+    expect(screen.getByText(/Live Telemetry/i)).toBeInTheDocument();
   });
 
   it("captures pressed keys and posts attempt on Enter", async () => {
