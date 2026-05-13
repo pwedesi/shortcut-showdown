@@ -2,6 +2,10 @@
 
 Backend and HTTP surface for **Shortcut Showdown**, implemented with the [Next.js](https://nextjs.org) App Router. The stack uses **TypeScript**, **React 19**, and **Tailwind CSS** for any app-facing routes and tooling.
 
+## Gameplay
+
+![Shortcut Showdown gameplay](public/shosho-gameplay.gif)
+
 ## Requirements
 
 - Node.js (LTS recommended)
