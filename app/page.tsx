@@ -5,10 +5,122 @@ import {
   IconPlayerPlayFilled,
   IconSquareRoundedPlus,
 } from "@tabler/icons-react";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { createLobby, joinLobby, quickPlay, ApiError } from "@/lib/api";
+import { formatApiErrorForUi } from "@/lib/api/errors";
+import { loadCallsignFromStorage, saveCallsignToStorage } from "@/lib/callsign";
+import { getAppDisplayVersion } from "@/lib/config";
+import { buildLobbyPath, parseJoinLobbyInput } from "@/lib/lobby";
+import { usePlayerConnection } from "@/lib/realtime/playerConnection";
+import { allowProtectedRoute, clearProtectedRoute } from "@/lib/session/useProtectedRoute";
+
+function connectionLabel(
+  status: "disconnected" | "connecting" | "connected" | "reconnecting" | "error",
+): { text: string; ok: boolean } {
+  if (status === "connected")
+    return { text: "Realtime connected", ok: true };
+  if (status === "connecting")
+    return { text: "Connecting…", ok: false };
+  if (status === "reconnecting")
+    return { text: "Reconnecting…", ok: false };
+  if (status === "error")
+    return { text: "Connection failed", ok: false };
+  return { text: "Offline", ok: false };
+}
 
 export default function Home() {
-  const [callsign, setCallsign] = useState("OPERATOR_01");
+  const router = useRouter();
+  const { status, playerId, lastError, reconnect } = usePlayerConnection();
+
+  const [callsign, setCallsign] = useState("");
+  const [showJoin, setShowJoin] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"create" | "join" | "quickplay" | null>(null);
+
+  useEffect(() => {
+    setCallsign(loadCallsignFromStorage());
+    clearProtectedRoute();
+  }, []);
+
+  const onCallsignBlur = useCallback(() => {
+    saveCallsignToStorage(callsign);
+  }, [callsign]);
+
+  const onCreate = useCallback(async () => {
+    setActionError(null);
+    if (!playerId) {
+      setActionError(
+        "Not connected to the server. Wait for the realtime link or try Retry.",
+      );
+      return;
+    }
+    setBusy("create");
+    try {
+      const lobby = await createLobby({ player_id: playerId });
+      saveCallsignToStorage(callsign);
+      allowProtectedRoute();
+      router.replace(buildLobbyPath(lobby));
+    } catch (e) {
+      setActionError(formatApiErrorForUi(e));
+    } finally {
+      setBusy(null);
+    }
+  }, [playerId, router, callsign]);
+
+  const onJoin = useCallback(async () => {
+    setActionError(null);
+    if (!playerId) {
+      setActionError(
+        "Not connected to the server. Wait for the realtime link or try Retry.",
+      );
+      return;
+    }
+    const parsed = parseJoinLobbyInput(joinCode);
+    if (!parsed.ok) {
+      setActionError(parsed.message);
+      return;
+    }
+    setBusy("join");
+    try {
+      const lobby = await joinLobby(parsed.id, { player_id: playerId });
+      saveCallsignToStorage(callsign);
+      allowProtectedRoute();
+      router.replace(buildLobbyPath(lobby));
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "not_found") {
+        setActionError("No lobby found with that code. Check and try again.");
+      } else {
+        setActionError(formatApiErrorForUi(e));
+      }
+    } finally {
+      setBusy(null);
+    }
+  }, [playerId, joinCode, router, callsign]);
+
+  const onQuickPlay = useCallback(async () => {
+    setActionError(null);
+    if (!playerId) {
+      setActionError(
+        "Not connected to the server. Wait for the realtime link or try Retry.",
+      );
+      return;
+    }
+    setBusy("quickplay");
+    try {
+      const lobby = await quickPlay({ player_id: playerId });
+      saveCallsignToStorage(callsign);
+      allowProtectedRoute();
+      router.replace(buildLobbyPath(lobby));
+    } catch (e) {
+      setActionError(formatApiErrorForUi(e));
+      setBusy(null);
+    }
+  }, [playerId, router, callsign]);
+
+  const conn = connectionLabel(status);
+  const appVersion = getAppDisplayVersion();
 
   return (
     <div className="relative isolate flex min-h-svh w-full flex-col bg-[#0a0a0a] text-foreground">
@@ -47,6 +159,15 @@ export default function Home() {
             className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-[#ff6d00] to-transparent opacity-60"
           />
 
+          {actionError && (
+            <div
+              role="alert"
+              className="mb-4 rounded-sm border border-[#c45c4a]/50 bg-[#2a1111]/80 px-3 py-2 text-sm text-[#f0c0b8]"
+            >
+              {actionError}
+            </div>
+          )}
+
           <div className="flex flex-col gap-2">
             <label
               className="text-xs font-medium tracking-[0.2em] text-[#e2bfb0] uppercase"
@@ -66,48 +187,114 @@ export default function Home() {
                 spellCheck={false}
                 value={callsign}
                 onChange={(e) => setCallsign(e.target.value)}
+                onBlur={onCallsignBlur}
               />
             </div>
           </div>
 
+          {showJoin && (
+            <div className="mt-4 flex flex-col gap-2">
+              <label
+                className="text-xs font-medium tracking-[0.2em] text-[#e2bfb0] uppercase"
+                htmlFor="join-code"
+              >
+                Lobby id or code
+              </label>
+              <input
+                id="join-code"
+                className="w-full rounded-sm border border-[color-mix(in_srgb,#e5e2e1_12%,transparent)] bg-[#0e0e0e] py-3 px-4 font-mono text-sm text-[#e5e2e1] outline-none focus:border-[color-mix(in_srgb,#ff6d00_45%,transparent)]"
+                placeholder="Same value as on the lobby screen"
+                spellCheck={false}
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+              />
+            </div>
+          )}
+
           <div className="mt-8 flex flex-col gap-4">
             <button
               type="button"
-              className="relative w-full overflow-hidden rounded-sm bg-linear-to-b from-[#ff9500] via-[#ff7b00] to-[#e85d00] py-4 font-sans text-lg font-bold tracking-[0.12em] text-[#341100] uppercase shadow-[0_0_0_1px_color-mix(in_srgb,#fff_12%,transparent)_inset] transition-[transform,box-shadow] duration-200 hover:shadow-[0_0_32px_color-mix(in_srgb,#ff6d00_45%,transparent),inset_0_0_24px_color-mix(in_srgb,#fff_18%,transparent)] active:scale-[0.99]"
+              onClick={onQuickPlay}
+              disabled={busy !== null}
+              className="relative w-full overflow-hidden rounded-sm bg-linear-to-b from-[#ff9500] via-[#ff7b00] to-[#e85d00] py-4 font-sans text-lg font-bold tracking-[0.12em] text-[#341100] uppercase shadow-[0_0_0_1px_color-mix(in_srgb,#fff_12%,transparent)_inset] transition-opacity hover:shadow-[0_0_0_1px_color-mix(in_srgb,#fff_20%,transparent)_inset] disabled:opacity-50"
             >
               <span className="flex items-center justify-center gap-2">
                 <IconPlayerPlayFilled className="size-6" aria-hidden />
-                Quick Play
+                {busy === "quickplay" ? "Loading…" : "Quick Play"}
               </span>
             </button>
 
             <div className="grid grid-cols-2 gap-4">
               <button
                 type="button"
-                className="flex items-center justify-center gap-2 rounded-sm border border-[color-mix(in_srgb,#594136_22%,transparent)] bg-transparent py-3 font-sans text-sm font-semibold tracking-wide text-[#e5e2e1] uppercase transition-[background-color,border-color] duration-200 hover:border-[color-mix(in_srgb,#ff6d00_35%,transparent)] hover:bg-[#353534]"
+                onClick={onCreate}
+                disabled={busy !== null}
+                className="flex items-center justify-center gap-2 rounded-sm border border-[color-mix(in_srgb,#594136_22%,transparent)] bg-transparent py-3 font-sans text-sm font-semibold tracking-wide text-[#e5e2e1] uppercase transition-[background-color,border-color] duration-200 hover:border-[color-mix(in_srgb,#ff6d00_35%,transparent)] hover:bg-[#353534] disabled:opacity-50"
               >
                 <IconSquareRoundedPlus
                   className="size-4 text-[#ffb692]"
                   aria-hidden
                 />
-                Create Lobby
+                {busy === "create" ? "…" : "Create Lobby"}
               </button>
               <button
                 type="button"
+                onClick={() => {
+                  setShowJoin((v) => !v);
+                  setActionError(null);
+                }}
                 className="flex items-center justify-center gap-2 rounded-sm border border-[color-mix(in_srgb,#594136_22%,transparent)] bg-transparent py-3 font-sans text-sm font-semibold tracking-wide text-[#e5e2e1] uppercase transition-[background-color,border-color] duration-200 hover:border-[color-mix(in_srgb,#ff6d00_35%,transparent)] hover:bg-[#353534]"
               >
                 <IconLogin className="size-4 text-[#ffb692]" aria-hidden />
-                Join Lobby
+                {showJoin ? "Hide join" : "Join Lobby"}
               </button>
             </div>
+            {showJoin && (
+              <button
+                type="button"
+                onClick={onJoin}
+                disabled={busy !== null}
+                className="w-full rounded-sm border border-[#ff6d00]/40 bg-[#ff6d00]/10 py-3 font-sans text-sm font-bold tracking-wide text-[#ffb692] uppercase transition-colors hover:bg-[#ff6d00]/20 disabled:opacity-50"
+              >
+                {busy === "join" ? "Joining…" : "Join with code"}
+              </button>
+            )}
           </div>
 
-          <div className="mt-6 flex items-center justify-between border-t border-[color-mix(in_srgb,#594136_14%,transparent)] pt-4 text-xs font-medium tracking-[0.18em] text-[#e2bfb0]/60 uppercase">
-            <span>V 2.4.1</span>
-            <span className="flex items-center gap-2 text-[#ffb692]/85">
-              <span className="size-2 animate-pulse rounded-full bg-[#ffb692]" />
-              Server Online
-            </span>
+          <div className="mt-6 flex flex-col gap-2 border-t border-[color-mix(in_srgb,#594136_14%,transparent)] pt-4 text-xs font-medium tracking-[0.18em] text-[#e2bfb0]/60 uppercase">
+            <div className="flex items-center justify-between">
+              <span>{appVersion}</span>
+              <span
+                className={
+                  conn.ok
+                    ? "flex items-center gap-2 text-[#ffb692]/85"
+                    : "flex items-center gap-2 text-[#888888]"
+                }
+              >
+                <span
+                  className={
+                    conn.ok
+                      ? "size-2 animate-pulse rounded-full bg-[#ffb692]"
+                      : "size-2 rounded-full bg-[#666]"
+                  }
+                />
+                {conn.text}
+              </span>
+            </div>
+            {(status === "error" || lastError) && status !== "connected" && (
+              <div className="flex items-center justify-between normal-case">
+                <span className="text-[#c45c4a]/90">
+                  {lastError ?? "Realtime unavailable."}
+                </span>
+                <button
+                  type="button"
+                  onClick={reconnect}
+                  className="text-[#ff6d00] hover:underline"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </main>
