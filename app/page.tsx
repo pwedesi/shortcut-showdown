@@ -13,6 +13,7 @@ import { loadCallsignFromStorage, saveCallsignToStorage } from "@/lib/callsign";
 import { getAppDisplayVersion } from "@/lib/config";
 import { buildLobbyPath, parseJoinLobbyInput } from "@/lib/lobby";
 import { usePlayerConnection } from "@/lib/realtime/playerConnection";
+import { allowProtectedRoute, clearProtectedRoute } from "@/lib/session/useProtectedRoute";
 
 function connectionLabel(
   status: "disconnected" | "connecting" | "connected" | "reconnecting" | "error",
@@ -40,6 +41,7 @@ export default function Home() {
 
   useEffect(() => {
     setCallsign(loadCallsignFromStorage());
+    clearProtectedRoute();
   }, []);
 
   const onCallsignBlur = useCallback(() => {
@@ -58,6 +60,7 @@ export default function Home() {
     try {
       const lobby = await createLobby({ player_id: playerId });
       saveCallsignToStorage(callsign);
+      allowProtectedRoute();
       router.replace(buildLobbyPath(lobby));
     } catch (e) {
       setActionError(formatApiErrorForUi(e));
@@ -83,6 +86,7 @@ export default function Home() {
     try {
       const lobby = await joinLobby(parsed.id, { player_id: playerId });
       saveCallsignToStorage(callsign);
+      allowProtectedRoute();
       router.replace(buildLobbyPath(lobby));
     } catch (e) {
       if (e instanceof ApiError && e.code === "not_found") {
@@ -107,6 +111,7 @@ export default function Home() {
     try {
       const lobby = await quickPlay({ player_id: playerId });
       saveCallsignToStorage(callsign);
+      allowProtectedRoute();
       router.replace(buildLobbyPath(lobby));
     } catch (e) {
       setActionError(formatApiErrorForUi(e));

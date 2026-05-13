@@ -32,7 +32,6 @@ import {
   kickPlayer,
   leaveLobby,
   lockLobby,
-  quickPlay,
   setChallengeCount,
   setMaxPlayers,
   setRoundDuration,
@@ -59,6 +58,10 @@ import {
   usePlayerConnection,
   useWebSocketMessageListener,
 } from "@/lib/realtime/playerConnection";
+import {
+  allowProtectedRoute,
+  useProtectedRoute,
+} from "@/lib/session/useProtectedRoute";
 import {
   getMessageEventName,
   mergeServerMessageBody,
@@ -162,13 +165,13 @@ function LobbyClient() {
     status,
     playerId,
     lastError,
-    reconnect,
     sendWebSocketJson,
   } = usePlayerConnection();
 
   const lobbyIdParam = getLobbyIdFromSearchParams(searchParams);
   const [callsign, setCallsign] = useState("");
   const [lobby, setLobby] = useState<Lobby | null>(null);
+  const routeAllowed = useProtectedRoute();
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<LobbyChatMessage[]>([]);
@@ -180,7 +183,6 @@ function LobbyClient() {
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [readyBusy, setReadyBusy] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
-  const [quickPlayBusy, setQuickPlayBusy] = useState(false);
   const [kickBusyPlayerId, setKickBusyPlayerId] = useState<string | null>(null);
   const [lastPoll, setLastPoll] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -207,6 +209,14 @@ function LobbyClient() {
       hadJoinedRef.current = false;
     }
   }, [lobbyIdParam]);
+
+  useEffect(() => {
+    if (!routeAllowed) return;
+    if (!lobbyIdParam && !lobby) {
+      router.replace("/");
+      return;
+    }
+  }, [lobbyIdParam, lobby, router, routeAllowed]);
 
   useEffect(() => {
     setCallsign(loadCallsignFromStorage());
@@ -275,7 +285,7 @@ function LobbyClient() {
   }, [lobbyIdParam]);
 
   useEffect(() => {
-    if (!lobbyIdParam) return;
+    if (!routeAllowed || !lobbyIdParam) return;
     void refresh();
     if (status === "connected") {
       return;
@@ -284,14 +294,14 @@ function LobbyClient() {
       void refresh();
     }, POLL_MS);
     return () => window.clearInterval(t);
-  }, [lobbyIdParam, refresh, status]);
+  }, [lobbyIdParam, refresh, status, routeAllowed]);
 
   /**
    * Invite links open `/lobby?id=…` without home "Join". Register this client via POST /join
    * once and stay on `/lobby` (does not navigate to gameplay).
    */
   useEffect(() => {
-    if (!lobbyIdParam || !playerId || !lobby) return;
+    if (!routeAllowed || !lobbyIdParam || !playerId || !lobby) return;
     if (removedFromLobbyRef.current) return;
     if (hadJoinedRef.current) return;
     if (lobbyHasPlayer(lobby, playerId)) return;
@@ -313,7 +323,7 @@ function LobbyClient() {
     return () => {
       cancelled = true;
     };
-  }, [lobbyIdParam, playerId, lobby, refresh]);
+  }, [lobbyIdParam, playerId, lobby, refresh, routeAllowed]);
 
   useEffect(() => {
     if (!lobby || !playerId) return;
@@ -345,6 +355,7 @@ function LobbyClient() {
         return;
       }
       navigatedToGameplayRef.current = true;
+      allowProtectedRoute();
       router.push(
         `/gameplay?room=${encodeURIComponent(r)}&lobby=${encodeURIComponent(lid)}`,
       );
@@ -461,7 +472,7 @@ function LobbyClient() {
         }
         navigateToGameplayForRoom(room);
       },
-      [lobbyIdParam, lobbyId, navigateToGameplayForRoom],
+      [lobbyIdParam, lobbyId, navigateToGameplayForRoom, router],
     ),
   );
 
@@ -495,6 +506,7 @@ function LobbyClient() {
         navigateToGameplayForRoom(room);
       } else {
         navigatedToGameplayRef.current = true;
+        allowProtectedRoute();
         router.push(`/gameplay?lobby=${encodeURIComponent(lobbyId)}`);
       }
     } catch (e) {
@@ -682,22 +694,6 @@ function LobbyClient() {
     },
     [lobbyId, playerId, lobby, refresh],
   );
-
-  const onQuickPlay = useCallback(async () => {
-    if (!playerId) {
-      setActionError("Waiting for player id from realtime connection.");
-      return;
-    }
-    setActionError(null);
-    setQuickPlayBusy(true);
-    try {
-      const newLobby = await quickPlay({ player_id: playerId });
-      router.push(`/lobby?id=${encodeURIComponent(newLobby.id)}`);
-    } catch (e) {
-      setActionError(formatApiErrorForUi(e));
-      setQuickPlayBusy(false);
-    }
-  }, [playerId, router]);
 
   const onKickPlayer = useCallback(
     async (targetPlayerId: string) => {

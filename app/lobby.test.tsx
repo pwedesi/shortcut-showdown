@@ -524,7 +524,6 @@ describe("Lobby page", () => {
       "fetch",
       vi.fn(async (input: RequestInfo) => {
         const u = String(input);
-        console.error("LOBBY TEST FETCH", u);
         if (u.includes("/players/")) {
           return fetchLobbySuccess({ player_id: playerWsId, display_name: "test" });
         }
@@ -549,8 +548,6 @@ describe("Lobby page", () => {
         <LobbyPage />
       </PlayerConnectionProvider>,
     );
-
-    screen.debug(undefined, 6000);
 
     await waitFor(() => {
       expect(screen.getByText(/1\/2 CONNECTED/)).toBeInTheDocument();
