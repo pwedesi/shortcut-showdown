@@ -11,6 +11,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import { allowProtectedRoute, useProtectedRoute } from "@/lib/session/useProtectedRoute";
 import { keysFromKeyboardEvent } from "@/lib/gameplay/keysFromKeyboard";
 import { useGameplaySession } from "@/lib/gameplay/useGameplaySession";
 import { leaveLobby } from "@/lib/api";
@@ -50,6 +51,14 @@ export function GameplayClient() {
   const roomId = searchParams.get("room")?.trim() ?? "";
   const { status, playerId, lastError, reconnect } = usePlayerConnection();
   const lobbyId = searchParams.get("lobby")?.trim() ?? "";
+
+  useProtectedRoute();
+
+  useEffect(() => {
+    if (!roomId) {
+      router.replace("/");
+    }
+  }, [roomId, router]);
   const [leaveBusy, setLeaveBusy] = useState(false);
 
   const navigatedRef = useRef(false);
@@ -65,6 +74,7 @@ export function GameplayClient() {
       if (ctx.playerId) {
         q.set("player", ctx.playerId);
       }
+      allowProtectedRoute();
       router.replace(`/results?${q.toString()}`);
     },
     [router],
@@ -290,7 +300,7 @@ export function GameplayClient() {
     setLeaveBusy(true);
     try {
       await leaveLobby(lobbyId, { player_id: playerId });
-    } catch (e) {
+    } catch {
       // ignore errors, still navigate home
     } finally {
       setLeaveBusy(false);

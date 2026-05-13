@@ -42,6 +42,21 @@ export function getMessageEventName(msg: unknown): string | null {
   return typeof t === "string" ? t : null;
 }
 
+export type ChatMessageBody = {
+  lobby_id?: string;
+  text?: string;
+  player_id?: string;
+  display_name?: string;
+  sent_at?: string | number;
+};
+
+export function parseChatMessageBody(msg: unknown): ChatMessageBody | null {
+  if (getMessageEventName(msg) !== "chat_message") {
+    return null;
+  }
+  return mergeServerMessageBody(msg) as ChatMessageBody;
+}
+
 /**
  * `event` / `type` of `connect` and `player_id` on the root or under `payload`.
  */
