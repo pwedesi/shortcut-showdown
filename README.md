@@ -27,6 +27,8 @@ pnpm install
 | `pnpm build` | Production build       |
 | `pnpm start`   | Run the production server |
 | `pnpm lint` | Run ESLint              |
+| `pnpm test` | Run unit tests (Vitest) |
+| `pnpm test:e2e` | Run Playwright E2E tests |
 
 Local development defaults to [http://localhost:3000](http://localhost:3000).
 

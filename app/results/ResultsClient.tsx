@@ -9,7 +9,7 @@ import {
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   acceptRematch,
@@ -38,6 +38,8 @@ import {
 
 const accuracyRadius = 36;
 const accuracyCircumference = 2 * Math.PI * accuracyRadius;
+const NOOP_SEND_WS_JSON: (body: Record<string, unknown>) => boolean = () =>
+  false;
 
 function rematchMessage(err: unknown): string {
   if (err instanceof ApiError) {
@@ -81,8 +83,8 @@ export function ResultsClient() {
 
   let status: PlayerConnectionStatus = "disconnected";
   let wsPlayerId: string | null = null;
-  let sendWebSocketJson: (body: Record<string, unknown>) => boolean = () =>
-    false;
+  let sendWebSocketJson: (body: Record<string, unknown>) => boolean =
+    NOOP_SEND_WS_JSON;
   let conn: {
     status: PlayerConnectionStatus;
     playerId: string | null;
@@ -99,17 +101,14 @@ export function ResultsClient() {
     // If the provider is not present (e.g., in unit tests), fall back to no-op
   }
 
-  const sendWebSocketJsonRef = useRef<(body: Record<string, unknown>) => boolean>(() => false);
-  sendWebSocketJsonRef.current = sendWebSocketJson;
-
   useEffect(() => {
     if (status === "connected" && roomId && wsPlayerId) {
-      sendWebSocketJsonRef.current({
+      sendWebSocketJson({
         type: "join_room",
         payload: { room_id: roomId, player_id: wsPlayerId },
       });
     }
-  }, [status, roomId, wsPlayerId]);
+  }, [status, roomId, wsPlayerId, sendWebSocketJson]);
 
   const subscribeMessages = conn?.subscribeMessages;
   useEffect(() => {
