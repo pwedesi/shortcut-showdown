@@ -10,6 +10,8 @@ import {
   IconMinus,
   IconPlus,
   IconAdjustments,
+  IconMessageCircle,
+  IconSend,
   IconUser,
   IconUsersGroup,
   IconLock,
@@ -71,6 +73,14 @@ const shell = {
   card: "border border-white/8 bg-[#141414] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
   muted: "text-[#888888]",
   accent: "text-[#ff8c00]",
+};
+
+type LobbyChatMessage = {
+  id: string;
+  playerId?: string;
+  displayName: string;
+  text: string;
+  receivedAt: number;
 };
 
 function LobbyShell({
@@ -148,13 +158,24 @@ function LobbyShell({
 function LobbyClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { status, playerId, lastError, reconnect } = usePlayerConnection();
+  const {
+    status,
+    playerId,
+    lastError,
+    reconnect,
+    sendWebSocketJson,
+  } = usePlayerConnection();
 
   const lobbyIdParam = getLobbyIdFromSearchParams(searchParams);
   const [callsign, setCallsign] = useState("");
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<LobbyChatMessage[]>([]);
+  const [chatText, setChatText] = useState("");
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [chatBusy, setChatBusy] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
   const [startBusy, setStartBusy] = useState(false);
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [readyBusy, setReadyBusy] = useState(false);
@@ -190,6 +211,15 @@ function LobbyClient() {
   useEffect(() => {
     setCallsign(loadCallsignFromStorage());
   }, []);
+
+  useEffect(() => {
+    if (
+      chatEndRef.current &&
+      typeof chatEndRef.current.scrollIntoView === "function"
+    ) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [chatMessages]);
 
   /**
    * Send the player's callsign to the backend whenever they have a player ID.
@@ -339,6 +369,31 @@ function LobbyClient() {
         if (name === "connect" || !name) {
           return;
         }
+        if (name === "chat_message") {
+          const body = mergeServerMessageBody(data);
+          const lid = typeof body.lobby_id === "string" ? body.lobby_id : undefined;
+          const text = typeof body.text === "string" ? body.text : undefined;
+          const currentLobbyId = lobbyIdParam ?? lobbyId;
+          if (!lid || !text || !currentLobbyId || lid !== currentLobbyId) {
+            return;
+          }
+          const sender = typeof body.display_name === "string" && body.display_name.trim()
+            ? body.display_name.trim()
+            : typeof body.player_id === "string"
+              ? `Player ${shortPlayerId(body.player_id)}`
+              : "Player";
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: `${Date.now()}-${prev.length}`,
+              playerId: typeof body.player_id === "string" ? body.player_id : undefined,
+              displayName: sender,
+              text,
+              receivedAt: Date.now(),
+            },
+          ]);
+          return;
+        }
         if (name === "kicked_from_lobby") {
           const body = mergeServerMessageBody(data);
           const lid =
@@ -464,6 +519,36 @@ function LobbyClient() {
       router.push("/");
     }
   }, [lobbyId, playerId, router]);
+
+  const onSendChat = useCallback(
+    (event?: React.FormEvent<HTMLFormElement>) => {
+      event?.preventDefault();
+      if (!lobbyId || !playerId) {
+        setChatError("Waiting for realtime connection and lobby id.");
+        return;
+      }
+      const trimmed = chatText.trim();
+      if (!trimmed) {
+        return;
+      }
+      setChatError(null);
+      setChatBusy(true);
+      const success = sendWebSocketJson({
+        type: "chat_message",
+        payload: {
+          lobby_id: lobbyId,
+          text: trimmed,
+        },
+      });
+      setChatBusy(false);
+      if (!success) {
+        setChatError("Unable to send chat. Connection is not open.");
+        return;
+      }
+      setChatText("");
+    },
+    [chatText, lobbyId, playerId, sendWebSocketJson],
+  );
 
   const onToggleReady = useCallback(async () => {
     if (!playerId) {
@@ -680,6 +765,8 @@ function LobbyClient() {
   const access = getLobbyAccessDisplay(lobby, lobbyIdParam);
   const accessHeroIsLong = access.length > 12;
   const accessLabel = hasServerShareCode(lobby) ? "ACCESS CODE" : "LOBBY ID";
+  const canSendChat = Boolean(playerId && lobbyId && status === "connected");
+  const mePlayerId = playerId;
   const connLine =
     status === "connected" && lastPoll
       ? `Poll ${new Date(lastPoll).toLocaleTimeString()} · RT: ${status}`
@@ -964,6 +1051,124 @@ function LobbyClient() {
                   </div>
                 )}
               </div>
+            </div>
+
+            <div className={cn("flex flex-col gap-3 p-6 md:p-7", shell.card)}>
+              <div className="flex items-center justify-between gap-3 border-b border-white/6 pb-3">
+                <h2
+                  className={cn(
+                    "flex items-center gap-2.5 font-sans text-[11px] font-bold uppercase tracking-[0.3em]",
+                    shell.accent,
+                  )}
+                >
+                  <IconMessageCircle className="size-5 shrink-0" stroke={1.5} />
+                  CHAT
+                </h2>
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#888888]">
+                  {status === "connected" ? "Realtime" : "Offline"}
+                </span>
+              </div>
+
+              <div className="flex min-h-[180px] max-h-[34rem] flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0b0b0b] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+                <div className="flex-1 overflow-y-auto px-4 py-4 text-sm theme-scrollbar">
+                  {chatMessages.length === 0 ? (
+                    <p className="text-[11px] text-[#888888]">
+                      No messages yet. Send the lobby a quick note.
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {chatMessages.map((message) => {
+                        const isMine = message.playerId && mePlayerId === message.playerId;
+                        return (
+                          <div
+                            key={message.id}
+                            className={cn(
+                              "flex w-full",
+                              isMine ? "justify-end" : "justify-start",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "max-w-[85%] rounded-none border px-4 py-3 shadow-[0_8px_20px_rgba(0,0,0,0.14)]",
+                                isMine
+                                  ? "border-[#ffb26c]/30 bg-[#ff9200]/18 text-[#331800]"
+                                  : "border-white/10 bg-[#141414]/95 text-[#e8e6e4]",
+                              )}
+                            >
+                              <div className="mb-2 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.2em] text-[#b0b0b0]">
+                                <span className={cn("font-semibold", isMine ? "text-[#ffdcab]" : "text-[#f3f1ef]")}>
+                                  {message.displayName}
+                                </span>
+                                <span className="text-[#888888]">
+                                  {new Date(message.receivedAt).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+                              </div>
+                              <p className={cn(
+                                "whitespace-pre-wrap leading-relaxed text-sm",
+                                isMine ? "text-foreground" : "text-[#e8e6e4]",
+                              )}>
+                                {message.text}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+              </div>
+
+              <form onSubmit={onSendChat} className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <label htmlFor="lobby-chat-input" className="sr-only">
+                  Lobby chat
+                </label>
+                <textarea
+                  id="lobby-chat-input"
+                  value={chatText}
+                  onChange={(event) => setChatText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      !event.shiftKey &&
+                      !event.ctrlKey &&
+                      !event.altKey &&
+                      !event.metaKey
+                    ) {
+                      event.preventDefault();
+                      onSendChat();
+                    }
+                  }}
+                  rows={2}
+                  placeholder="Type a message…"
+                  disabled={!canSendChat}
+                  className={cn(
+                    "min-h-[5rem] w-full resize-none rounded-sm border border-white/10 bg-[#0b0b0b] px-3 py-3 text-sm leading-normal text-[#e8e6e4] placeholder:text-[#6f6f6f] outline-none transition-colors",
+                    "focus:border-[#ff8c00]/60 focus:ring-2 focus:ring-[#ff8c00]/10",
+                    !canSendChat && "cursor-not-allowed opacity-70",
+                  )}
+                />
+                <button
+                  type="submit"
+                  disabled={!canSendChat || chatBusy}
+                  className={cn(
+                    "flex h-full items-center justify-center gap-2 rounded-sm border border-[#ff8c00]/30 bg-[#ff8c00]/10 px-4 py-3 text-sm font-bold uppercase tracking-[0.18em] text-[#ffcc99] transition-colors",
+                    "hover:bg-[#ff8c00]/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
+                    (!canSendChat || chatBusy) && "cursor-not-allowed opacity-60",
+                  )}
+                >
+                  <IconSend className="size-4" stroke={1.5} />
+                  {chatBusy ? "SENDING…" : "SEND"}
+                </button>
+              </form>
+              {chatError && (
+                <p role="alert" className="text-xs text-[#f0c0b8]">
+                  {chatError}
+                </p>
+              )}
             </div>
 
             {isRoomLeader ? (

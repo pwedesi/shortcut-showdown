@@ -154,6 +154,32 @@
       inset 0 1px 0 color-mix(in srgb, #ff6d00 35%, transparent);
   }
 
+  .theme-scrollbar {
+    scrollbar-width: thin !important;
+    scrollbar-color: #ff9200 #141414 !important;
+  }
+  .theme-scrollbar::-webkit-scrollbar {
+    width: 10px !important;
+    height: 10px !important;
+    background: #141414 !important;
+  }
+  .theme-scrollbar::-webkit-scrollbar-track {
+    background: #141414 !important;
+    border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+  .theme-scrollbar::-webkit-scrollbar-thumb {
+    background: #ff9200 !important;
+    border-radius: 0 !important;
+    border: 2px solid #141414 !important;
+    min-height: 24px !important;
+  }
+  .theme-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #ffb26c !important;
+  }
+  .theme-scrollbar::-webkit-scrollbar-corner {
+    background: #141414 !important;
+  }
+
   .glow-title-home {
     text-shadow:
       0 0 24px color-mix(in srgb, #ff6d00 55%, transparent),

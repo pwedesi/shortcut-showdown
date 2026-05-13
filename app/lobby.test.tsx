@@ -18,6 +18,7 @@ class MockWebSocket {
   onmessage: ((ev: { data: string }) => void) | null = null;
   onerror: (() => void) | null = null;
   onclose: (() => void) | null = null;
+  sent: string | null = null;
 
   constructor(url: string) {
     if (!String(url).includes("/ws")) {
@@ -33,6 +34,10 @@ class MockWebSocket {
         }),
       });
     });
+  }
+
+  send(data: string) {
+    this.sent = data;
   }
 
   close() {
@@ -459,6 +464,117 @@ describe("Lobby page", () => {
       expect(push).toHaveBeenCalledWith(
         expect.stringMatching(/room=room-ws-1/),
       );
+    });
+  });
+
+  it("sends lobby chat messages over WebSocket", async () => {
+    searchParams = new URLSearchParams(`id=${LOBBY_ID}`);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo) => {
+        const u = String(input);
+        if (u.includes("/players/")) {
+          return fetchLobbySuccess({ player_id: playerWsId, display_name: "test" });
+        }
+        if (
+          u.startsWith("http://test.local/lobbies/") &&
+          u.includes(LOBBY_ID) &&
+          !u.match(/join|leave|start/)
+        ) {
+          return fetchLobbySuccess({
+            id: LOBBY_ID,
+            players: [playerWsId],
+            status: "waiting",
+            max_players: 2,
+          });
+        }
+        return new Response("bad", { status: 500 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <PlayerConnectionProvider>
+        <LobbyPage />
+      </PlayerConnectionProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/1\/2 CONNECTED/)).toBeInTheDocument();
+    });
+
+    const ws = MockWebSocket.instances.at(-1)!;
+    await user.type(screen.getByPlaceholderText(/Type a message/), "Hello lobby!");
+    await user.click(screen.getByRole("button", { name: /send/i }));
+
+    expect(ws.sent).toBeTruthy();
+    expect(JSON.parse(ws.sent!)).toEqual({
+      v: 1,
+      type: "chat_message",
+      payload: {
+        lobby_id: LOBBY_ID,
+        text: "Hello lobby!",
+      },
+    });
+  });
+
+  it("renders inbound lobby chat messages", async () => {
+    searchParams = new URLSearchParams(`id=${LOBBY_ID}`);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo) => {
+        const u = String(input);
+        console.error("LOBBY TEST FETCH", u);
+        if (u.includes("/players/")) {
+          return fetchLobbySuccess({ player_id: playerWsId, display_name: "test" });
+        }
+        if (
+          u.startsWith("http://test.local/lobbies/") &&
+          u.includes(LOBBY_ID) &&
+          !u.match(/join|leave|start/)
+        ) {
+          return fetchLobbySuccess({
+            id: LOBBY_ID,
+            players: [playerWsId],
+            status: "waiting",
+            max_players: 2,
+          });
+        }
+        return new Response("bad", { status: 500 });
+      }),
+    );
+
+    render(
+      <PlayerConnectionProvider>
+        <LobbyPage />
+      </PlayerConnectionProvider>,
+    );
+
+    screen.debug(undefined, 6000);
+
+    await waitFor(() => {
+      expect(screen.getByText(/1\/2 CONNECTED/)).toBeInTheDocument();
+    });
+
+    const ws = MockWebSocket.instances.at(-1)!;
+    await act(async () => {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          v: 1,
+          type: "chat_message",
+          payload: {
+            lobby_id: LOBBY_ID,
+            text: "Hello lobby!",
+            player_id: "p-host",
+            display_name: "Host",
+          },
+        }),
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Hello lobby!/)).toBeInTheDocument();
+      expect(screen.getByText(/Host/)).toBeInTheDocument();
     });
   });
 
