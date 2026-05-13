@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  acceptRematch,
   createRematch,
+  declineRematch,
   getGameRoom,
   getMatchResults,
   submitGameAttempt,
@@ -145,6 +147,54 @@ describe("game room API client", () => {
     expect(out.next_lobby_id).toBe("lobby-next");
     expect(fetch).toHaveBeenCalledWith(
       `${API}/game-rooms/${encodeURIComponent(ROOM_ID)}/rematch`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ player_id: "p1" }),
+      }),
+    );
+  });
+
+  it("acceptRematch POSTs player_id", async () => {
+    const body = {
+      room_id: ROOM_ID,
+      accepted_by: ["p1"],
+      pending_players: ["p2"],
+      all_accepted: false,
+    };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const out = await acceptRematch(ROOM_ID, { player_id: "p1" });
+    expect(out.accepted_by).toEqual(["p1"]);
+    expect(fetch).toHaveBeenCalledWith(
+      `${API}/game-rooms/${encodeURIComponent(ROOM_ID)}/rematch/accept`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ player_id: "p1" }),
+      }),
+    );
+  });
+
+  it("declineRematch POSTs player_id", async () => {
+    const body = {
+      room_id: ROOM_ID,
+      accepted_by: ["p2"],
+      pending_players: [],
+      all_accepted: false,
+    };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const out = await declineRematch(ROOM_ID, { player_id: "p1" });
+    expect(out.pending_players).toEqual([]);
+    expect(fetch).toHaveBeenCalledWith(
+      `${API}/game-rooms/${encodeURIComponent(ROOM_ID)}/rematch/decline`,
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ player_id: "p1" }),
