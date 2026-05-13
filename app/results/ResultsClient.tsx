@@ -9,7 +9,7 @@ import {
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   acceptRematch,
@@ -22,6 +22,7 @@ import {
   usePlayerConnection,
   type PlayerConnectionStatus,
 } from "@/lib/realtime/playerConnection";
+import { useProtectedRoute } from "@/lib/session/useProtectedRoute";
 import { fetchMatchResultsWithRetry } from "@/lib/results/fetchMatchResultsWithRetry";
 import {
   findPlacementForPlayer,
@@ -94,18 +95,21 @@ export function ResultsClient() {
     status = c.status;
     wsPlayerId = c.playerId;
     sendWebSocketJson = c.sendWebSocketJson;
-  } catch (err) {
+  } catch {
     // If the provider is not present (e.g., in unit tests), fall back to no-op
   }
 
+  const sendWebSocketJsonRef = useRef<(body: Record<string, unknown>) => boolean>(() => false);
+  sendWebSocketJsonRef.current = sendWebSocketJson;
+
   useEffect(() => {
     if (status === "connected" && roomId && wsPlayerId) {
-      sendWebSocketJson({
+      sendWebSocketJsonRef.current({
         type: "join_room",
         payload: { room_id: roomId, player_id: wsPlayerId },
       });
     }
-  }, [status, roomId, wsPlayerId, sendWebSocketJson]);
+  }, [status, roomId, wsPlayerId]);
 
   const subscribeMessages = conn?.subscribeMessages;
   useEffect(() => {
@@ -141,6 +145,8 @@ export function ResultsClient() {
     return unsub;
   }, [subscribeMessages, router]);
 
+  useProtectedRoute();
+
   useEffect(() => {
     void Promise.resolve().then(() => {
       const spRoom = searchParams.get("room")?.trim() ?? "";
@@ -159,6 +165,12 @@ export function ResultsClient() {
       }
     });
   }, [router, searchParams]);
+
+  useEffect(() => {
+    if (resolvedParams && !roomId) {
+      router.replace("/");
+    }
+  }, [resolvedParams, roomId, router]);
 
   const runFetch = useCallback(async () => {
     if (!roomId) return;

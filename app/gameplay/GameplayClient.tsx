@@ -11,6 +11,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import { allowProtectedRoute, useProtectedRoute } from "@/lib/session/useProtectedRoute";
 import { keysFromKeyboardEvent } from "@/lib/gameplay/keysFromKeyboard";
 import { useGameplaySession } from "@/lib/gameplay/useGameplaySession";
 import { leaveLobby } from "@/lib/api";
@@ -50,6 +51,14 @@ export function GameplayClient() {
   const roomId = searchParams.get("room")?.trim() ?? "";
   const { status, playerId, lastError, reconnect } = usePlayerConnection();
   const lobbyId = searchParams.get("lobby")?.trim() ?? "";
+
+  useProtectedRoute();
+
+  useEffect(() => {
+    if (!roomId) {
+      router.replace("/");
+    }
+  }, [roomId, router]);
   const [leaveBusy, setLeaveBusy] = useState(false);
 
   const navigatedRef = useRef(false);
@@ -65,6 +74,7 @@ export function GameplayClient() {
       if (ctx.playerId) {
         q.set("player", ctx.playerId);
       }
+      allowProtectedRoute();
       router.replace(`/results?${q.toString()}`);
     },
     [router],
@@ -95,6 +105,10 @@ export function GameplayClient() {
     return session.currentChallenge.prompt;
   }, [session.currentChallenge]);
 
+  const limboMode = Boolean(
+    session.hasNoMoreChallenges && !session.gameState?.finished,
+  );
+
   const outcomeLabel = useMemo(() => {
     if (session.myProgress === null) {
       return "Waiting for your slot…";
@@ -109,10 +123,10 @@ export function GameplayClient() {
   }, [session.gameState, session.myProgress]);
 
   useEffect(() => {
-    if (!session.gameState?.finished) {
+    if (!session.gameState?.finished && !limboMode) {
       inputRef.current?.focus();
     }
-  }, [session.gameState?.finished, objectiveText, roomId]);
+  }, [limboMode, session.gameState?.finished, objectiveText, roomId]);
 
   useEffect(() => {
     return () => {
@@ -149,7 +163,7 @@ export function GameplayClient() {
   }
 
   async function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (session.gameState?.finished) {
+    if (session.gameState?.finished || limboMode) {
       return;
     }
 
@@ -286,7 +300,7 @@ export function GameplayClient() {
     setLeaveBusy(true);
     try {
       await leaveLobby(lobbyId, { player_id: playerId });
-    } catch (e) {
+    } catch {
       // ignore errors, still navigate home
     } finally {
       setLeaveBusy(false);
@@ -382,52 +396,72 @@ export function GameplayClient() {
           <div className="absolute top-0 left-0 h-px w-full bg-linear-to-r from-[#353534] via-[#ff6d00] to-[#353534] opacity-60" />
 
           <div className="mx-auto flex max-w-4xl flex-col items-center gap-7 md:gap-8">
-            <span className="border-l-2 border-[#ffb692] bg-[#0e0e0e] px-4 py-1 text-xs tracking-[0.28em] text-[#ffb692] uppercase">
-              Active Objective
-            </span>
+            {limboMode ? (
+              <>
+                <span className="border-l-2 border-[#ffb692] bg-[#0e0e0e] px-4 py-1 text-xs tracking-[0.28em] text-[#ffb692] uppercase">
+                  Awaiting other drivers
+                </span>
 
-            <div className="text-center text-2xl font-bold leading-tight tracking-tight sm:text-4xl md:text-6xl">
-              <span className="text-[#e5e2e1] uppercase drop-shadow-[0_0_10px_rgba(255,109,0,0.55)]">
-                {objectiveText}
-              </span>
-            </div>
+                <div className="text-center text-2xl font-bold leading-tight tracking-tight sm:text-4xl md:text-6xl">
+                  <span className="text-[#e5e2e1] uppercase drop-shadow-[0_0_10px_rgba(255,109,0,0.55)]">
+                    No more challenges
+                  </span>
+                </div>
 
-            {session.submitError && (
-              <p className="text-center text-sm text-[#c45c4a]">
-                {session.submitError}
-              </p>
+                <p className="text-center text-sm text-[#c45c4a]">
+                  You ran out of objectives. Waiting for the rest of the race to end.
+                </p>
+              </>
+            ) : (
+              <>
+                <span className="border-l-2 border-[#ffb692] bg-[#0e0e0e] px-4 py-1 text-xs tracking-[0.28em] text-[#ffb692] uppercase">
+                  Active Objective
+                </span>
+
+                <div className="text-center text-2xl font-bold leading-tight tracking-tight sm:text-4xl md:text-6xl">
+                  <span className="text-[#e5e2e1] uppercase drop-shadow-[0_0_10px_rgba(255,109,0,0.55)]">
+                    {objectiveText}
+                  </span>
+                </div>
+
+                {session.submitError && (
+                  <p className="text-center text-sm text-[#c45c4a]">
+                    {session.submitError}
+                  </p>
+                )}
+
+                <div className="relative mt-1 w-full max-w-2xl">
+                  <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 font-mono text-lg text-[#ffb692]">
+                    &gt;
+                  </span>
+                  <input
+                    ref={inputRef}
+                    aria-label="Type the shortcut"
+                    autoComplete="off"
+                    className={`w-full border-none py-4 pr-4 pl-12 text-xl tracking-[0.12em] text-[#e5e2e1] outline-none transition-all md:text-2xl ${inputVisualClass}`}
+                    disabled={finished}
+                    placeholder={
+                      finished
+                        ? "Round complete"
+                        : "Press shortcut keys, then Enter"
+                    }
+                    readOnly
+                    spellCheck={false}
+                    value={entry}
+                    onKeyDown={(e) => {
+                      void handleInputKeyDown(e);
+                    }}
+                  />
+                  <div
+                    className={`pointer-events-none absolute inset-0 animate-pulse mix-blend-screen opacity-10 ${overlayColorClass}`}
+                  />
+                </div>
+
+                <p className="text-xs tracking-[0.2em] text-[#a98a7c] uppercase md:text-sm">
+                  {outcomeLabel}
+                </p>
+              </>
             )}
-
-            <div className="relative mt-1 w-full max-w-2xl">
-              <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 font-mono text-lg text-[#ffb692]">
-                &gt;
-              </span>
-              <input
-                ref={inputRef}
-                aria-label="Type the shortcut"
-                autoComplete="off"
-                className={`w-full border-none py-4 pr-4 pl-12 text-xl tracking-[0.12em] text-[#e5e2e1] outline-none transition-all md:text-2xl ${inputVisualClass}`}
-                disabled={finished}
-                placeholder={
-                  finished
-                    ? "Round complete"
-                    : "Press shortcut keys, then Enter"
-                }
-                readOnly
-                spellCheck={false}
-                value={entry}
-                onKeyDown={(e) => {
-                  void handleInputKeyDown(e);
-                }}
-              />
-              <div
-                className={`pointer-events-none absolute inset-0 animate-pulse mix-blend-screen opacity-10 ${overlayColorClass}`}
-              />
-            </div>
-
-            <p className="text-xs tracking-[0.2em] text-[#a98a7c] uppercase md:text-sm">
-              {outcomeLabel}
-            </p>
           </div>
         </section>
 
