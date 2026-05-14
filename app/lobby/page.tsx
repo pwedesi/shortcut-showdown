@@ -341,6 +341,22 @@ function LobbyClient() {
     return () => window.clearTimeout(t);
   }, [lobby, playerId, router]);
 
+  useEffect(() => {
+    if (!lobby || !playerId) return;
+    const inLobby = lobbyHasPlayer(lobby, playerId);
+    if (inLobby) {
+      hadJoinedRef.current = true;
+      return;
+    }
+    if (!hadJoinedRef.current || removedFromLobbyRef.current) return;
+    removedFromLobbyRef.current = true;
+    setActionError("You were removed from the lobby.");
+    const t = window.setTimeout(() => {
+      router.push("/");
+    }, 1200);
+    return () => window.clearTimeout(t);
+  }, [lobby, playerId, router]);
+
   const navigateToGameplayForRoom = useCallback(
     (room: string) => {
       const r = room.trim();
@@ -720,6 +736,38 @@ function LobbyClient() {
         setActionError(formatApiErrorForUi(e));
       } finally {
         setKickBusyPlayerId((prev) => (prev === targetPlayerId ? null : prev));
+      }
+    },
+    [lobbyId, playerId, lobby, refresh],
+  );
+
+  const onKickPlayer = useCallback(
+    async (targetPlayerId: string) => {
+      if (!lobbyId || !playerId) {
+        setActionError("Waiting for player id or lobby id.");
+        return;
+      }
+      if (!lobby || getLobbyLeaderPlayerId(lobby) !== playerId) {
+        setActionError("Only the room leader can kick players.");
+        return;
+      }
+      if (targetPlayerId === playerId) {
+        return;
+      }
+      setActionError(null);
+      setKickBusyPlayerId(targetPlayerId);
+      try {
+        await kickPlayer(lobbyId, {
+          player_id: playerId,
+          target_player_id: targetPlayerId,
+        });
+        await refresh();
+      } catch (e) {
+        setActionError(formatApiErrorForUi(e));
+      } finally {
+        setKickBusyPlayerId((prev) =>
+          prev === targetPlayerId ? null : prev,
+        );
       }
     },
     [lobbyId, playerId, lobby, refresh],

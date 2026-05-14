@@ -1,6 +1,36 @@
-# Shortcut Showdown API
+# Shortcut Showdown Frontend
 
-Backend and HTTP surface for **Shortcut Showdown**, implemented with the [Next.js](https://nextjs.org) App Router. The stack uses **TypeScript**, **React 19**, and **Tailwind CSS** for any app-facing routes and tooling.
+Frontend client for **Shortcut Showdown**, built with **Next.js App Router**, **React 19**, **TypeScript**, and **Tailwind CSS**. It powers the full player flow: home → lobby → gameplay → results (with rematch handling).
+
+## High-level architecture
+
+```mermaid
+flowchart LR
+    U[Player Browser]
+
+    subgraph FE[Next.js Frontend]
+      R[App Router Pages<br/>home, lobby, gameplay, results]
+      PC[PlayerConnectionProvider<br/>WebSocket lifecycle + player identity]
+      G[Gameplay Session Hook<br/>state merge, key submit, poll fallback]
+      API[API Client Layer<br/>typed REST requests]
+      UTIL[Domain Utilities<br/>lobby/results/realtime helpers]
+    end
+
+    subgraph BE[Shortcut Showdown Backend]
+      WS[WebSocket /ws<br/>realtime events]
+      REST[REST API<br/>lobbies, game-rooms, attempts, results, rematch]
+    end
+
+    U --> R
+    R --> PC
+    R --> G
+    R --> API
+    G --> API
+    R --> UTIL
+    PC <-->|realtime events| WS
+    API <-->|HTTP JSON| REST
+    G -.poll/re-sync fallback.-> REST
+```
 
 ## Gameplay
 
@@ -8,31 +38,55 @@ Backend and HTTP surface for **Shortcut Showdown**, implemented with the [Next.j
 
 ## Requirements
 
-- Node.js (LTS recommended)
-- [pnpm](https://pnpm.io) (see `package.json` → `packageManager` for the version Corepack should use)
+- Node.js (LTS)
+- [pnpm](https://pnpm.io) (project uses `pnpm@10.33.0`)
 
 ## Setup
 
-Install dependencies:
-
 ```bash
 pnpm install
+pnpm dev
 ```
 
-## Scripts
+App runs at [http://localhost:3000](http://localhost:3000).
 
-| Command       | Description              |
-| ------------- | ------------------------ |
-| `pnpm dev` | Start the dev server     |
-| `pnpm build` | Production build       |
-| `pnpm start`   | Run the production server |
-| `pnpm lint` | Run ESLint              |
+## Environment variables
 
-Local development defaults to [http://localhost:3000](http://localhost:3000).
+Create `.env.local` (or set env vars in your runtime):
 
-## Project layout
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | Base URL for REST requests | `http://localhost:8000` |
+| `NEXT_PUBLIC_WS_URL` | Optional explicit WebSocket base URL | derived from API URL |
+| `NEXT_PUBLIC_WS_PATH` | WebSocket path | `/ws` |
+| `NEXT_PUBLIC_APP_VERSION` | Version label shown in UI | `v 1.0.0` |
 
-- `app/` — App Router entry (`layout.tsx`, `page.tsx`, and future API routes under `app/api/` as you add them)
+## Available scripts
+
+| Command | Description |
+| --- | --- |
+| `pnpm dev` | Start development server |
+| `pnpm build` | Build production bundle |
+| `pnpm start` | Run production server |
+| `pnpm lint` | Run ESLint |
+| `pnpm test` | Run Vitest test suite |
+| `pnpm test:watch` | Run tests in watch mode |
+
+## Frontend route flow
+
+- `/` — create, join, or quick-play a lobby
+- `/lobby?id=...` — roster, settings, readiness, start flow
+- `/gameplay?room=...` — realtime race UI with REST fallback polling
+- `/results?room=...&player=...` — leaderboard, telemetry, rematch decisions
+
+## Project structure
+
+- `app/` — App Router pages, layouts, and screen-level client components
+- `lib/api/` — typed REST client and endpoint wrappers
+- `lib/realtime/` — WebSocket connection context and message helpers
+- `lib/gameplay/`, `lib/lobby/`, `lib/results/` — feature-domain logic/hooks/utilities
+- `lib/session/` — session-scoped persistence helpers (for results context)
+- `public/` — static assets
 
 ---
 
