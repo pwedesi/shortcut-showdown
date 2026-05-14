@@ -104,6 +104,11 @@ export function useGameplaySession({
         });
         if (res.accepted) {
           applyGameState(res.game_state);
+          if (res.skipped) {
+            const m = "Skipped";
+            setSubmitError(m);
+            return { ok: true, message: m };
+          }
           if (res.correct === false) {
             const m = "Incorrect";
             setSubmitError(m);
@@ -248,11 +253,12 @@ export function useGameplaySession({
     if (!roomId) {
       return;
     }
-    const interval =
-      status !== "connected" && status !== "connecting" ? 2000 : 5000;
+    if (status === "connected") {
+      return;
+    }
     const id = window.setInterval(() => {
       void loadRoom("poll");
-    }, interval);
+    }, 2000);
     return () => {
       window.clearInterval(id);
     };
@@ -277,10 +283,21 @@ export function useGameplaySession({
       return null;
     }
     const idx = p.objective_index;
+    return gameState.challenges.find((c) => c.index === idx) ?? null;
+  }, [gameState, playerId]);
+
+  const hasNoMoreChallenges = useMemo(() => {
+    if (!gameState || !playerId) {
+      return false;
+    }
+    const p = gameState.players[playerId];
+    if (!p) {
+      return false;
+    }
     return (
-      gameState.challenges.find((c) => c.index === idx) ??
-      gameState.challenges[0] ??
-      null
+      !gameState.finished &&
+      gameState.objective_count > 0 &&
+      p.objective_index >= gameState.objective_count
     );
   }, [gameState, playerId]);
 
@@ -373,6 +390,7 @@ export function useGameplaySession({
     submitError,
     timeLeftSec,
     currentChallenge,
+    hasNoMoreChallenges,
     myProgress,
     trySubmitKeys,
     trySubmitText,

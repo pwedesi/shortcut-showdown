@@ -32,6 +32,10 @@ flowchart LR
     G -.poll/re-sync fallback.-> REST
 ```
 
+## Gameplay
+
+![Shortcut Showdown gameplay](public/shosho-gameplay.gif)
+
 ## Requirements
 
 - Node.js (LTS)

@@ -1,6 +1,6 @@
 "use client";
 
-import { IconBell, IconBolt, IconHome, IconUser } from "@tabler/icons-react";
+import { IconHome, IconUser, IconLogout } from "@tabler/icons-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -11,8 +11,10 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import { allowProtectedRoute, useProtectedRoute } from "@/lib/session/useProtectedRoute";
 import { keysFromKeyboardEvent } from "@/lib/gameplay/keysFromKeyboard";
 import { useGameplaySession } from "@/lib/gameplay/useGameplaySession";
+import { leaveLobby } from "@/lib/api";
 import { usePlayerConnection } from "@/lib/realtime/playerConnection";
 
 function clamp(value: number, min: number, max: number): number {
@@ -48,6 +50,16 @@ export function GameplayClient() {
   const searchParams = useSearchParams();
   const roomId = searchParams.get("room")?.trim() ?? "";
   const { status, playerId, lastError, reconnect } = usePlayerConnection();
+  const lobbyId = searchParams.get("lobby")?.trim() ?? "";
+
+  useProtectedRoute();
+
+  useEffect(() => {
+    if (!roomId) {
+      router.replace("/");
+    }
+  }, [roomId, router]);
+  const [leaveBusy, setLeaveBusy] = useState(false);
 
   const navigatedRef = useRef(false);
 
@@ -62,6 +74,7 @@ export function GameplayClient() {
       if (ctx.playerId) {
         q.set("player", ctx.playerId);
       }
+      allowProtectedRoute();
       router.replace(`/results?${q.toString()}`);
     },
     [router],
@@ -78,9 +91,7 @@ export function GameplayClient() {
   const [feedback, setFeedback] = useState<"idle" | "success" | "error">(
     "idle",
   );
-  const resetFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const resetFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -93,6 +104,10 @@ export function GameplayClient() {
     }
     return session.currentChallenge.prompt;
   }, [session.currentChallenge]);
+
+  const limboMode = Boolean(
+    session.hasNoMoreChallenges && !session.gameState?.finished,
+  );
 
   const outcomeLabel = useMemo(() => {
     if (session.myProgress === null) {
@@ -108,10 +123,10 @@ export function GameplayClient() {
   }, [session.gameState, session.myProgress]);
 
   useEffect(() => {
-    if (!session.gameState?.finished) {
+    if (!session.gameState?.finished && !limboMode) {
       inputRef.current?.focus();
     }
-  }, [session.gameState?.finished, objectiveText, roomId]);
+  }, [limboMode, session.gameState?.finished, objectiveText, roomId]);
 
   useEffect(() => {
     return () => {
@@ -148,7 +163,7 @@ export function GameplayClient() {
   }
 
   async function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (session.gameState?.finished) {
+    if (session.gameState?.finished || limboMode) {
       return;
     }
 
@@ -201,12 +216,8 @@ export function GameplayClient() {
     });
   }, [playerId, session.gameState, session.roomView?.players]);
 
-  const wpm = session.myProgress
-    ? Math.round(session.myProgress.wpm)
-    : 0;
-  const acc = session.myProgress
-    ? session.myProgress.accuracy
-    : 0;
+  const wpm = session.myProgress ? Math.round(session.myProgress.wpm) : 0;
+  const acc = session.myProgress ? session.myProgress.accuracy : 0;
   const streak = session.myProgress ? session.myProgress.streak : 0;
 
   const inputVisualClass =
@@ -281,6 +292,22 @@ export function GameplayClient() {
     );
   }
 
+  async function handleQuit() {
+    if (!lobbyId || !playerId) {
+      router.push("/");
+      return;
+    }
+    setLeaveBusy(true);
+    try {
+      await leaveLobby(lobbyId, { player_id: playerId });
+    } catch {
+      // ignore errors, still navigate home
+    } finally {
+      setLeaveBusy(false);
+      router.push("/");
+    }
+  }
+
   return (
     <div className="relative min-h-svh bg-[#0e0e0e] text-[#e5e2e1] selection:bg-[#ff6d00] selection:text-[#341100]">
       <div
@@ -297,27 +324,25 @@ export function GameplayClient() {
           {syncLabel} RT: {status}
         </p>
 
-        <div className="flex items-center gap-3 text-[#ff6d00]">
+        <div className="ml-4 flex items-center">
           <button
             type="button"
-            aria-label="Notifications"
-            className="rounded-sm p-1.5 transition-colors hover:text-[#ffb692]"
+            onClick={() => void handleQuit()}
+            disabled={leaveBusy}
+            aria-label="Quit match"
+            className="inline-flex items-center gap-2 rounded-md border border-[#2b2b2b] bg-transparent px-3 py-2 text-sm text-[#ffb692] hover:bg-[#1f1f1f] hover:shadow-[0_4px_20px_rgba(255,109,0,0.06)] disabled:opacity-50"
           >
-            <IconBell className="size-5" />
-          </button>
-          <button
-            type="button"
-            aria-label="Powerups"
-            className="rounded-sm p-1.5 transition-colors hover:text-[#ffb692]"
-          >
-            <IconBolt className="size-5" />
+            <IconLogout className="size-4" aria-hidden />
+            <span className="hidden md:inline">Quit</span>
           </button>
         </div>
       </nav>
 
       {session.syncMode === "reconnecting" && (
         <div className="flex flex-col items-center gap-1 border-b border-[#594136] bg-[#1c1b1b] px-4 py-2 text-center text-xs text-[#ffcf8f] sm:flex-row sm:justify-center sm:gap-3">
-          <span>Reconnecting to realtime — match state refreshes on a timer.</span>
+          <span>
+            Reconnecting to realtime — match state refreshes on a timer.
+          </span>
           <button
             type="button"
             onClick={session.onReconnectSync}
@@ -371,52 +396,72 @@ export function GameplayClient() {
           <div className="absolute top-0 left-0 h-px w-full bg-linear-to-r from-[#353534] via-[#ff6d00] to-[#353534] opacity-60" />
 
           <div className="mx-auto flex max-w-4xl flex-col items-center gap-7 md:gap-8">
-            <span className="border-l-2 border-[#ffb692] bg-[#0e0e0e] px-4 py-1 text-xs tracking-[0.28em] text-[#ffb692] uppercase">
-              Active Objective
-            </span>
+            {limboMode ? (
+              <>
+                <span className="border-l-2 border-[#ffb692] bg-[#0e0e0e] px-4 py-1 text-xs tracking-[0.28em] text-[#ffb692] uppercase">
+                  Awaiting other drivers
+                </span>
 
-            <div className="text-center text-2xl font-bold leading-tight tracking-tight sm:text-4xl md:text-6xl">
-              <span className="text-[#e5e2e1] uppercase drop-shadow-[0_0_10px_rgba(255,109,0,0.55)]">
-                {objectiveText}
-              </span>
-            </div>
+                <div className="text-center text-2xl font-bold leading-tight tracking-tight sm:text-4xl md:text-6xl">
+                  <span className="text-[#e5e2e1] uppercase drop-shadow-[0_0_10px_rgba(255,109,0,0.55)]">
+                    No more challenges
+                  </span>
+                </div>
 
-            {session.submitError && (
-              <p className="text-center text-sm text-[#c45c4a]">
-                {session.submitError}
-              </p>
+                <p className="text-center text-sm text-[#c45c4a]">
+                  You ran out of objectives. Waiting for the rest of the race to end.
+                </p>
+              </>
+            ) : (
+              <>
+                <span className="border-l-2 border-[#ffb692] bg-[#0e0e0e] px-4 py-1 text-xs tracking-[0.28em] text-[#ffb692] uppercase">
+                  Active Objective
+                </span>
+
+                <div className="text-center text-2xl font-bold leading-tight tracking-tight sm:text-4xl md:text-6xl">
+                  <span className="text-[#e5e2e1] uppercase drop-shadow-[0_0_10px_rgba(255,109,0,0.55)]">
+                    {objectiveText}
+                  </span>
+                </div>
+
+                {session.submitError && (
+                  <p className="text-center text-sm text-[#c45c4a]">
+                    {session.submitError}
+                  </p>
+                )}
+
+                <div className="relative mt-1 w-full max-w-2xl">
+                  <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 font-mono text-lg text-[#ffb692]">
+                    &gt;
+                  </span>
+                  <input
+                    ref={inputRef}
+                    aria-label="Type the shortcut"
+                    autoComplete="off"
+                    className={`w-full border-none py-4 pr-4 pl-12 text-xl tracking-[0.12em] text-[#e5e2e1] outline-none transition-all md:text-2xl ${inputVisualClass}`}
+                    disabled={finished}
+                    placeholder={
+                      finished
+                        ? "Round complete"
+                        : "Press shortcut keys, then Enter"
+                    }
+                    readOnly
+                    spellCheck={false}
+                    value={entry}
+                    onKeyDown={(e) => {
+                      void handleInputKeyDown(e);
+                    }}
+                  />
+                  <div
+                    className={`pointer-events-none absolute inset-0 animate-pulse mix-blend-screen opacity-10 ${overlayColorClass}`}
+                  />
+                </div>
+
+                <p className="text-xs tracking-[0.2em] text-[#a98a7c] uppercase md:text-sm">
+                  {outcomeLabel}
+                </p>
+              </>
             )}
-
-            <div className="relative mt-1 w-full max-w-2xl">
-              <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 font-mono text-lg text-[#ffb692]">
-                &gt;
-              </span>
-              <input
-                ref={inputRef}
-                aria-label="Type the shortcut"
-                autoComplete="off"
-                className={`w-full border-none py-4 pr-4 pl-12 text-xl tracking-[0.12em] text-[#e5e2e1] outline-none transition-all md:text-2xl ${inputVisualClass}`}
-                disabled={finished}
-                placeholder={
-                  finished
-                    ? "Round complete"
-                    : "Press shortcut keys, then Enter"
-                }
-                readOnly
-                spellCheck={false}
-                value={entry}
-                onKeyDown={(e) => {
-                  void handleInputKeyDown(e);
-                }}
-              />
-              <div
-                className={`pointer-events-none absolute inset-0 animate-pulse mix-blend-screen opacity-10 ${overlayColorClass}`}
-              />
-            </div>
-
-            <p className="text-xs tracking-[0.2em] text-[#a98a7c] uppercase md:text-sm">
-              {outcomeLabel}
-            </p>
           </div>
         </section>
 
@@ -451,7 +496,9 @@ export function GameplayClient() {
                 >
                   <IconUser
                     className={
-                      lane.you ? "size-5 text-[#ffcf8f]" : "size-5 text-[#a98a7c]"
+                      lane.you
+                        ? "size-5 text-[#ffcf8f]"
+                        : "size-5 text-[#a98a7c]"
                     }
                   />
                 </div>

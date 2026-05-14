@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  IconBell,
   IconCheck,
   IconClock,
   IconCopy,
@@ -10,8 +9,9 @@ import {
   IconPlayerPlayFilled,
   IconMinus,
   IconPlus,
-  IconSettings,
   IconAdjustments,
+  IconMessageCircle,
+  IconSend,
   IconUser,
   IconUsersGroup,
   IconLock,
@@ -32,7 +32,6 @@ import {
   kickPlayer,
   leaveLobby,
   lockLobby,
-  quickPlay,
   setChallengeCount,
   setMaxPlayers,
   setRoundDuration,
@@ -52,12 +51,17 @@ import {
   getLobbyMaxPlayers,
   hasServerShareCode,
   lobbyHasPlayer,
+  normalizeLobbyFromApi,
   shortPlayerId,
 } from "@/lib/lobby";
 import {
   usePlayerConnection,
   useWebSocketMessageListener,
 } from "@/lib/realtime/playerConnection";
+import {
+  allowProtectedRoute,
+  useProtectedRoute,
+} from "@/lib/session/useProtectedRoute";
 import {
   getMessageEventName,
   mergeServerMessageBody,
@@ -74,18 +78,24 @@ const shell = {
   accent: "text-[#ff8c00]",
 };
 
+type LobbyChatMessage = {
+  id: string;
+  playerId?: string;
+  displayName: string;
+  text: string;
+  receivedAt: number;
+};
+
 function LobbyShell({
   children,
   headerExtra,
   connLine,
-  reconnectSlot,
   onLeave,
   leaveDisabled,
 }: {
   children: ReactNode;
   headerExtra: ReactNode;
   connLine: string;
-  reconnectSlot?: ReactNode;
   onLeave: () => void;
   leaveDisabled: boolean;
 }) {
@@ -126,33 +136,12 @@ function LobbyShell({
             >
               MULTIPLAYER
             </span>
-            <a
-              className={cn(
-                "rounded px-3 py-2 transition-colors hover:bg-white/4",
-                shell.muted,
-                "hover:text-[#c4c2c0]",
-              )}
-              href="#"
-            >
-              RANKINGS
-            </a>
-            <a
-              className={cn(
-                "rounded px-3 py-2 transition-colors hover:bg-white/4",
-                shell.muted,
-                "hover:text-[#c4c2c0]",
-              )}
-              href="#"
-            >
-              STORAGE
-            </a>
           </nav>
         </div>
         <div className="flex items-center gap-2 text-sm text-[#ff8c00]">
           <span className="hidden max-w-56 truncate font-mono text-[10px] text-[#888] md:block">
             {connLine}
           </span>
-          {reconnectSlot}
           <button
             type="button"
             onClick={onLeave}
@@ -161,20 +150,7 @@ function LobbyShell({
           >
             Leave
           </button>
-          <button
-            type="button"
-            className="rounded-md p-2.5 transition-colors hover:bg-white/6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]"
-            aria-label="Settings"
-          >
-            <IconSettings className="size-6" stroke={1.5} />
-          </button>
-          <button
-            type="button"
-            className="rounded-md p-2.5 transition-colors hover:bg-white/6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]"
-            aria-label="Notifications"
-          >
-            <IconBell className="size-6" stroke={1.5} />
-          </button>
+          {/* Settings and notifications removed (non-functional) */}
         </div>
       </header>
       {children}
@@ -185,18 +161,28 @@ function LobbyShell({
 function LobbyClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { status, playerId, lastError, reconnect } = usePlayerConnection();
+  const {
+    status,
+    playerId,
+    lastError,
+    sendWebSocketJson,
+  } = usePlayerConnection();
 
   const lobbyIdParam = getLobbyIdFromSearchParams(searchParams);
   const [callsign, setCallsign] = useState("");
   const [lobby, setLobby] = useState<Lobby | null>(null);
+  const routeAllowed = useProtectedRoute();
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<LobbyChatMessage[]>([]);
+  const [chatText, setChatText] = useState("");
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [chatBusy, setChatBusy] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
   const [startBusy, setStartBusy] = useState(false);
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [readyBusy, setReadyBusy] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
-  const [quickPlayBusy, setQuickPlayBusy] = useState(false);
   const [kickBusyPlayerId, setKickBusyPlayerId] = useState<string | null>(null);
   const [lastPoll, setLastPoll] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -225,8 +211,25 @@ function LobbyClient() {
   }, [lobbyIdParam]);
 
   useEffect(() => {
+    if (!routeAllowed) return;
+    if (!lobbyIdParam && !lobby) {
+      router.replace("/");
+      return;
+    }
+  }, [lobbyIdParam, lobby, router, routeAllowed]);
+
+  useEffect(() => {
     setCallsign(loadCallsignFromStorage());
   }, []);
+
+  useEffect(() => {
+    if (
+      chatEndRef.current &&
+      typeof chatEndRef.current.scrollIntoView === "function"
+    ) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [chatMessages]);
 
   /**
    * Send the player's callsign to the backend whenever they have a player ID.
@@ -282,20 +285,23 @@ function LobbyClient() {
   }, [lobbyIdParam]);
 
   useEffect(() => {
-    if (!lobbyIdParam) return;
+    if (!routeAllowed || !lobbyIdParam) return;
     void refresh();
+    if (status === "connected") {
+      return;
+    }
     const t = window.setInterval(() => {
       void refresh();
     }, POLL_MS);
     return () => window.clearInterval(t);
-  }, [lobbyIdParam, refresh]);
+  }, [lobbyIdParam, refresh, status, routeAllowed]);
 
   /**
    * Invite links open `/lobby?id=…` without home "Join". Register this client via POST /join
    * once and stay on `/lobby` (does not navigate to gameplay).
    */
   useEffect(() => {
-    if (!lobbyIdParam || !playerId || !lobby) return;
+    if (!routeAllowed || !lobbyIdParam || !playerId || !lobby) return;
     if (removedFromLobbyRef.current) return;
     if (hadJoinedRef.current) return;
     if (lobbyHasPlayer(lobby, playerId)) return;
@@ -317,7 +323,23 @@ function LobbyClient() {
     return () => {
       cancelled = true;
     };
-  }, [lobbyIdParam, playerId, lobby, refresh]);
+  }, [lobbyIdParam, playerId, lobby, refresh, routeAllowed]);
+
+  useEffect(() => {
+    if (!lobby || !playerId) return;
+    const inLobby = lobbyHasPlayer(lobby, playerId);
+    if (inLobby) {
+      hadJoinedRef.current = true;
+      return;
+    }
+    if (!hadJoinedRef.current || removedFromLobbyRef.current) return;
+    removedFromLobbyRef.current = true;
+    setActionError("You were removed from the lobby.");
+    const t = window.setTimeout(() => {
+      router.push("/");
+    }, 1200);
+    return () => window.clearTimeout(t);
+  }, [lobby, playerId, router]);
 
   useEffect(() => {
     if (!lobby || !playerId) return;
@@ -349,6 +371,7 @@ function LobbyClient() {
         return;
       }
       navigatedToGameplayRef.current = true;
+      allowProtectedRoute();
       router.push(
         `/gameplay?room=${encodeURIComponent(r)}&lobby=${encodeURIComponent(lid)}`,
       );
@@ -371,6 +394,65 @@ function LobbyClient() {
         }
         const name = getMessageEventName(data);
         if (name === "connect" || !name) {
+          return;
+        }
+        if (name === "chat_message") {
+          const body = mergeServerMessageBody(data);
+          const lid = typeof body.lobby_id === "string" ? body.lobby_id : undefined;
+          const text = typeof body.text === "string" ? body.text : undefined;
+          const currentLobbyId = lobbyIdParam ?? lobbyId;
+          if (!lid || !text || !currentLobbyId || lid !== currentLobbyId) {
+            return;
+          }
+          const sender = typeof body.display_name === "string" && body.display_name.trim()
+            ? body.display_name.trim()
+            : typeof body.player_id === "string"
+              ? `Player ${shortPlayerId(body.player_id)}`
+              : "Player";
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: `${Date.now()}-${prev.length}`,
+              playerId: typeof body.player_id === "string" ? body.player_id : undefined,
+              displayName: sender,
+              text,
+              receivedAt: Date.now(),
+            },
+          ]);
+          return;
+        }
+        if (name === "kicked_from_lobby") {
+          const body = mergeServerMessageBody(data);
+          const lid =
+            typeof body.lobby_id === "string" ? body.lobby_id : undefined;
+          if (lid && (lobbyIdParam ?? lobbyId) === lid) {
+            // Mark removal and show immediate feedback, then navigate home
+            removedFromLobbyRef.current = true;
+            setActionError(
+              body && typeof body.message === "string"
+                ? body.message
+                : "You were removed from the lobby.",
+            );
+            window.setTimeout(() => router.push("/"), 800);
+          }
+          return;
+        }
+        if (name === "lobby_updated" || name === "lobby_snapshot") {
+          const body = mergeServerMessageBody(data);
+          const payloadLobby =
+            typeof body.lobby === "object" && body.lobby !== null
+              ? body.lobby
+              : body;
+          const next = normalizeLobbyFromApi(payloadLobby);
+          const nextId = next.id.trim();
+          const expected = lobbyIdParam ?? lobbyId ?? "";
+          if (nextId && expected && nextId !== expected) {
+            return;
+          }
+          if (nextId) {
+            setLobby(next);
+            setLastPoll(Date.now());
+          }
           return;
         }
         if (
@@ -406,7 +488,7 @@ function LobbyClient() {
         }
         navigateToGameplayForRoom(room);
       },
-      [navigateToGameplayForRoom],
+      [lobbyIdParam, lobbyId, navigateToGameplayForRoom, router],
     ),
   );
 
@@ -440,6 +522,7 @@ function LobbyClient() {
         navigateToGameplayForRoom(room);
       } else {
         navigatedToGameplayRef.current = true;
+        allowProtectedRoute();
         router.push(`/gameplay?lobby=${encodeURIComponent(lobbyId)}`);
       }
     } catch (e) {
@@ -465,6 +548,36 @@ function LobbyClient() {
     }
   }, [lobbyId, playerId, router]);
 
+  const onSendChat = useCallback(
+    (event?: React.FormEvent<HTMLFormElement>) => {
+      event?.preventDefault();
+      if (!lobbyId || !playerId) {
+        setChatError("Waiting for realtime connection and lobby id.");
+        return;
+      }
+      const trimmed = chatText.trim();
+      if (!trimmed) {
+        return;
+      }
+      setChatError(null);
+      setChatBusy(true);
+      const success = sendWebSocketJson({
+        type: "chat_message",
+        payload: {
+          lobby_id: lobbyId,
+          text: trimmed,
+        },
+      });
+      setChatBusy(false);
+      if (!success) {
+        setChatError("Unable to send chat. Connection is not open.");
+        return;
+      }
+      setChatText("");
+    },
+    [chatText, lobbyId, playerId, sendWebSocketJson],
+  );
+
   const onToggleReady = useCallback(async () => {
     if (!playerId) {
       setActionError("Waiting for player id from realtime connection.");
@@ -479,9 +592,7 @@ function LobbyClient() {
       return {
         ...prev,
         players: prev.players.map((p) =>
-          p.player_id === playerId
-            ? { ...p, is_ready: nextReady }
-            : p,
+          p.player_id === playerId ? { ...p, is_ready: nextReady } : p,
         ),
       };
     });
@@ -541,12 +652,17 @@ function LobbyClient() {
       const next = current + delta;
       if (next < 1 || next > 20) return;
       if (next < lobby.players.length && delta < 0) {
-        setActionError(`Cannot reduce max players below current member count (${lobby.players.length}).`);
+        setActionError(
+          `Cannot reduce max players below current member count (${lobby.players.length}).`,
+        );
         return;
       }
       setActionError(null);
       try {
-        await setMaxPlayers(lobbyId, { player_id: playerId, max_players: next });
+        await setMaxPlayers(lobbyId, {
+          player_id: playerId,
+          max_players: next,
+        });
         await refresh();
       } catch (e) {
         setActionError(formatApiErrorForUi(e));
@@ -595,21 +711,35 @@ function LobbyClient() {
     [lobbyId, playerId, lobby, refresh],
   );
 
-  const onQuickPlay = useCallback(async () => {
-    if (!playerId) {
-      setActionError("Waiting for player id from realtime connection.");
-      return;
-    }
-    setActionError(null);
-    setQuickPlayBusy(true);
-    try {
-      const newLobby = await quickPlay({ player_id: playerId });
-      router.push(`/lobby?id=${encodeURIComponent(newLobby.id)}`);
-    } catch (e) {
-      setActionError(formatApiErrorForUi(e));
-      setQuickPlayBusy(false);
-    }
-  }, [playerId, router]);
+  const onKickPlayer = useCallback(
+    async (targetPlayerId: string) => {
+      if (!lobbyId || !playerId) {
+        setActionError("Waiting for player id or lobby id.");
+        return;
+      }
+      if (!lobby || getLobbyLeaderPlayerId(lobby) !== playerId) {
+        setActionError("Only the room leader can kick players.");
+        return;
+      }
+      if (targetPlayerId === playerId) {
+        return;
+      }
+      setActionError(null);
+      setKickBusyPlayerId(targetPlayerId);
+      try {
+        await kickPlayer(lobbyId, {
+          player_id: playerId,
+          target_player_id: targetPlayerId,
+        });
+        await refresh();
+      } catch (e) {
+        setActionError(formatApiErrorForUi(e));
+      } finally {
+        setKickBusyPlayerId((prev) => (prev === targetPlayerId ? null : prev));
+      }
+    },
+    [lobbyId, playerId, lobby, refresh],
+  );
 
   const onKickPlayer = useCallback(
     async (targetPlayerId: string) => {
@@ -652,15 +782,6 @@ function LobbyClient() {
           router.push("/");
         }}
         leaveDisabled={false}
-        reconnectSlot={
-          <button
-            type="button"
-            onClick={reconnect}
-            className="hidden rounded border border-white/15 px-2 py-1 text-[10px] text-[#ff8c00] md:block"
-          >
-            Retry RT
-          </button>
-        }
       >
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="text-center text-[#c45c4a]">
@@ -676,18 +797,20 @@ function LobbyClient() {
   const maxP = getLobbyMaxPlayers(lobby);
   const count = lobby?.players?.length ?? 0;
   const leaderId = lobby ? getLobbyLeaderPlayerId(lobby) : null;
-  const isRoomLeader = Boolean(
-    playerId && leaderId && playerId === leaderId,
-  );
+  const isRoomLeader = Boolean(playerId && leaderId && playerId === leaderId);
   const nonLeaderPlayers = (lobby?.players ?? []).filter(
     (p) => p.player_id !== leaderId,
   );
   const allNonLeadersReady = nonLeaderPlayers.every((p) => p.is_ready === true);
-  const myRosterEntry = (lobby?.players ?? []).find((p) => p.player_id === playerId);
+  const myRosterEntry = (lobby?.players ?? []).find(
+    (p) => p.player_id === playerId,
+  );
   const isMeReady = Boolean(myRosterEntry?.is_ready);
   const access = getLobbyAccessDisplay(lobby, lobbyIdParam);
   const accessHeroIsLong = access.length > 12;
   const accessLabel = hasServerShareCode(lobby) ? "ACCESS CODE" : "LOBBY ID";
+  const canSendChat = Boolean(playerId && lobbyId && status === "connected");
+  const mePlayerId = playerId;
   const connLine =
     status === "connected" && lastPoll
       ? `Poll ${new Date(lastPoll).toLocaleTimeString()} · RT: ${status}`
@@ -716,15 +839,6 @@ function LobbyClient() {
     <LobbyShell
       headerExtra={lobby ? `Status: ${lobby.status}` : "…"}
       connLine={connLine}
-      reconnectSlot={
-        <button
-          type="button"
-          onClick={reconnect}
-          className="hidden rounded border border-white/15 px-2 py-1 text-[10px] text-[#ff8c00] md:block"
-        >
-          Retry RT
-        </button>
-      }
       onLeave={onLeave}
       leaveDisabled={leaveBusy}
     >
@@ -772,67 +886,68 @@ function LobbyClient() {
                 className="pointer-events-none absolute bottom-0 left-0 h-0.5 w-full bg-linear-to-r from-transparent via-[#ff8c00] to-transparent shadow-[0_0_12px_rgba(255,140,0,0.5)]"
               />
               <div className="relative z-10 flex w-full max-w-full flex-col items-center">
-              <span
-                className={cn(
-                  "mb-3 font-sans text-[11px] font-semibold uppercase tracking-[0.35em]",
-                  shell.accent,
-                )}
-              >
-                {accessLabel}
-              </span>
-              <h1
-                className={cn(
-                  "max-w-full wrap-break-word text-center font-black text-white",
-                  accessHeroIsLong
-                    ? "font-mono text-base font-bold leading-snug tracking-tight sm:text-lg md:text-xl"
-                    : "font-sans text-4xl tracking-[-0.06em] sm:text-6xl md:text-8xl",
-                )}
-              >
-                {lobby ? access : "…"}
-              </h1>
-              {lobby && accessHeroIsLong ? (
-                <p
+                <span
                   className={cn(
-                    "mt-3 max-w-xs text-center font-sans text-[10px] leading-relaxed tracking-wide",
-                    shell.muted,
+                    "mb-3 font-sans text-[11px] font-semibold uppercase tracking-[0.35em]",
+                    shell.accent,
                   )}
                 >
-                  On the home screen, paste this id in Join, or open this page’s
-                  URL in the browser — short snippets of the id are not valid.
-                </p>
-              ) : null}
-              <button
-                type="button"
-                onClick={copyLink}
-                className={cn(
-                  "group relative z-10 mt-8 flex min-h-11 cursor-pointer items-center gap-2.5 rounded-sm px-3 py-2.5 transition-colors",
-                  "text-[#ff8c00] hover:bg-[#ff8c00]/10 hover:text-[#ffb366]",
-                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
-                )}
-              >
-                <span className="flex size-8 items-center justify-center rounded border border-[#ff8c00]/40 bg-[#ff8c00]/7 transition-transform group-hover:border-[#ff8c00]/60">
-                  <IconCopy className="size-4" stroke={1.5} aria-hidden />
+                  {accessLabel}
                 </span>
-                <span className="text-xs font-bold tracking-[0.25em]">
-                  {copied ? "COPIED" : "COPY ID"}
-                </span>
-              </button>
-              {copyError && lastCopyText ? (
-                <div className="mt-3 w-full max-w-[min(100%,20rem)] px-1">
-                  <p className="mb-1.5 text-center text-[10px] leading-relaxed text-[#e8a090]">
-                    {copyError}
+                <h1
+                  className={cn(
+                    "max-w-full wrap-break-word text-center font-black text-white",
+                    accessHeroIsLong
+                      ? "font-mono text-base font-bold leading-snug tracking-tight sm:text-lg md:text-xl"
+                      : "font-sans text-4xl tracking-[-0.06em] sm:text-6xl md:text-8xl",
+                  )}
+                >
+                  {lobby ? access : "…"}
+                </h1>
+                {lobby && accessHeroIsLong ? (
+                  <p
+                    className={cn(
+                      "mt-3 max-w-xs text-center font-sans text-[10px] leading-relaxed tracking-wide",
+                      shell.muted,
+                    )}
+                  >
+                    On the home screen, paste this id in Join, or open this
+                    page’s URL in the browser — short snippets of the id are not
+                    valid.
                   </p>
-                  <input
-                    type="text"
-                    readOnly
-                    aria-label="Lobby id to copy"
-                    className="w-full cursor-text select-all rounded-sm border border-white/10 bg-[#0a0a0a] px-2 py-2 font-mono text-[10px] text-[#e8e6e4] focus:border-[#ff8c00]/50 focus:outline-none"
-                    value={lastCopyText}
-                    onClick={(e) => e.currentTarget.select()}
-                    onFocus={(e) => e.currentTarget.select()}
-                  />
-                </div>
-              ) : null}
+                ) : null}
+                <button
+                  type="button"
+                  onClick={copyLink}
+                  className={cn(
+                    "group relative z-10 mt-8 flex min-h-11 cursor-pointer items-center gap-2.5 rounded-sm px-3 py-2.5 transition-colors",
+                    "text-[#ff8c00] hover:bg-[#ff8c00]/10 hover:text-[#ffb366]",
+                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
+                  )}
+                >
+                  <span className="flex size-8 items-center justify-center rounded border border-[#ff8c00]/40 bg-[#ff8c00]/7 transition-transform group-hover:border-[#ff8c00]/60">
+                    <IconCopy className="size-4" stroke={1.5} aria-hidden />
+                  </span>
+                  <span className="text-xs font-bold tracking-[0.25em]">
+                    {copied ? "COPIED" : "COPY ID"}
+                  </span>
+                </button>
+                {copyError && lastCopyText ? (
+                  <div className="mt-3 w-full max-w-[min(100%,20rem)] px-1">
+                    <p className="mb-1.5 text-center text-[10px] leading-relaxed text-[#e8a090]">
+                      {copyError}
+                    </p>
+                    <input
+                      type="text"
+                      readOnly
+                      aria-label="Lobby id to copy"
+                      className="w-full cursor-text select-all rounded-sm border border-white/10 bg-[#0a0a0a] px-2 py-2 font-mono text-[10px] text-[#e8e6e4] focus:border-[#ff8c00]/50 focus:outline-none"
+                      value={lastCopyText}
+                      onClick={(e) => e.currentTarget.select()}
+                      onFocus={(e) => e.currentTarget.select()}
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -854,18 +969,24 @@ function LobbyClient() {
                       ? String(lobby.challenge_count)
                       : "…"
                   }
-                  onIncrement={isRoomLeader ? () => onSetChallengeCount(1) : undefined}
-                  onDecrement={isRoomLeader ? () => onSetChallengeCount(-1) : undefined}
+                  onIncrement={
+                    isRoomLeader ? () => onSetChallengeCount(1) : undefined
+                  }
+                  onDecrement={
+                    isRoomLeader ? () => onSetChallengeCount(-1) : undefined
+                  }
                 />
                 <ParamCell
                   label="MAX PLAYERS"
                   value={
-                    lobby?.max_players != null
-                      ? String(lobby.max_players)
-                      : "…"
+                    lobby?.max_players != null ? String(lobby.max_players) : "…"
                   }
-                  onIncrement={isRoomLeader ? () => onSetMaxPlayers(1) : undefined}
-                  onDecrement={isRoomLeader ? () => onSetMaxPlayers(-1) : undefined}
+                  onIncrement={
+                    isRoomLeader ? () => onSetMaxPlayers(1) : undefined
+                  }
+                  onDecrement={
+                    isRoomLeader ? () => onSetMaxPlayers(-1) : undefined
+                  }
                 />
                 <ParamCell
                   label="ROUND (SEC)"
@@ -874,8 +995,12 @@ function LobbyClient() {
                       ? String(lobby.round_duration_seconds)
                       : "…"
                   }
-                  onIncrement={isRoomLeader ? () => onSetRoundDuration(10) : undefined}
-                  onDecrement={isRoomLeader ? () => onSetRoundDuration(-10) : undefined}
+                  onIncrement={
+                    isRoomLeader ? () => onSetRoundDuration(10) : undefined
+                  }
+                  onDecrement={
+                    isRoomLeader ? () => onSetRoundDuration(-10) : undefined
+                  }
                 />
                 <div className="border border-white/6 bg-[#0c0c0c] p-4">
                   <span
@@ -914,9 +1039,7 @@ function LobbyClient() {
                     "font-mono text-[11px] font-semibold tracking-wide text-[#ff8c00]",
                   )}
                 >
-                  {lobby
-                    ? `${count}/${maxP} CONNECTED`
-                    : "LOADING…"}
+                  {lobby ? `${count}/${maxP} CONNECTED` : "LOADING…"}
                 </span>
               </div>
 
@@ -935,7 +1058,9 @@ function LobbyClient() {
                     const disambiguated = needsSuffix
                       ? `${base} · ${shortPlayerId(pid, 4)}`
                       : base;
-                    const name = isYou ? `${disambiguated} (you)` : disambiguated;
+                    const name = isYou
+                      ? `${disambiguated} (you)`
+                      : disambiguated;
                     const canKick = isRoomLeader && !isYou;
                     return (
                       <PlayerRow
@@ -947,9 +1072,7 @@ function LobbyClient() {
                         isReady={p.is_ready ?? false}
                         canKick={canKick}
                         kickBusy={kickBusyPlayerId === pid}
-                        onKick={
-                          canKick ? () => onKickPlayer(pid) : undefined
-                        }
+                        onKick={canKick ? () => onKickPlayer(pid) : undefined}
                       />
                     );
                   })}
@@ -972,6 +1095,124 @@ function LobbyClient() {
                   </div>
                 )}
               </div>
+            </div>
+
+            <div className={cn("flex flex-col gap-3 p-6 md:p-7", shell.card)}>
+              <div className="flex items-center justify-between gap-3 border-b border-white/6 pb-3">
+                <h2
+                  className={cn(
+                    "flex items-center gap-2.5 font-sans text-[11px] font-bold uppercase tracking-[0.3em]",
+                    shell.accent,
+                  )}
+                >
+                  <IconMessageCircle className="size-5 shrink-0" stroke={1.5} />
+                  CHAT
+                </h2>
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#888888]">
+                  {status === "connected" ? "Realtime" : "Offline"}
+                </span>
+              </div>
+
+              <div className="flex min-h-[180px] max-h-[34rem] flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0b0b0b] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+                <div className="flex-1 overflow-y-auto px-4 py-4 text-sm theme-scrollbar">
+                  {chatMessages.length === 0 ? (
+                    <p className="text-[11px] text-[#888888]">
+                      No messages yet. Send the lobby a quick note.
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {chatMessages.map((message) => {
+                        const isMine = message.playerId && mePlayerId === message.playerId;
+                        return (
+                          <div
+                            key={message.id}
+                            className={cn(
+                              "flex w-full",
+                              isMine ? "justify-end" : "justify-start",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "max-w-[85%] rounded-none border px-4 py-3 shadow-[0_8px_20px_rgba(0,0,0,0.14)]",
+                                isMine
+                                  ? "border-[#ffb26c]/30 bg-[#ff9200]/18 text-[#331800]"
+                                  : "border-white/10 bg-[#141414]/95 text-[#e8e6e4]",
+                              )}
+                            >
+                              <div className="mb-2 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.2em] text-[#b0b0b0]">
+                                <span className={cn("font-semibold", isMine ? "text-[#ffdcab]" : "text-[#f3f1ef]")}>
+                                  {message.displayName}
+                                </span>
+                                <span className="text-[#888888]">
+                                  {new Date(message.receivedAt).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+                              </div>
+                              <p className={cn(
+                                "whitespace-pre-wrap leading-relaxed text-sm",
+                                isMine ? "text-foreground" : "text-[#e8e6e4]",
+                              )}>
+                                {message.text}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+              </div>
+
+              <form onSubmit={onSendChat} className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <label htmlFor="lobby-chat-input" className="sr-only">
+                  Lobby chat
+                </label>
+                <textarea
+                  id="lobby-chat-input"
+                  value={chatText}
+                  onChange={(event) => setChatText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      !event.shiftKey &&
+                      !event.ctrlKey &&
+                      !event.altKey &&
+                      !event.metaKey
+                    ) {
+                      event.preventDefault();
+                      onSendChat();
+                    }
+                  }}
+                  rows={2}
+                  placeholder="Type a message…"
+                  disabled={!canSendChat}
+                  className={cn(
+                    "min-h-[5rem] w-full resize-none rounded-sm border border-white/10 bg-[#0b0b0b] px-3 py-3 text-sm leading-normal text-[#e8e6e4] placeholder:text-[#6f6f6f] outline-none transition-colors",
+                    "focus:border-[#ff8c00]/60 focus:ring-2 focus:ring-[#ff8c00]/10",
+                    !canSendChat && "cursor-not-allowed opacity-70",
+                  )}
+                />
+                <button
+                  type="submit"
+                  disabled={!canSendChat || chatBusy}
+                  className={cn(
+                    "flex h-full items-center justify-center gap-2 rounded-sm border border-[#ff8c00]/30 bg-[#ff8c00]/10 px-4 py-3 text-sm font-bold uppercase tracking-[0.18em] text-[#ffcc99] transition-colors",
+                    "hover:bg-[#ff8c00]/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8c00]",
+                    (!canSendChat || chatBusy) && "cursor-not-allowed opacity-60",
+                  )}
+                >
+                  <IconSend className="size-4" stroke={1.5} />
+                  {chatBusy ? "SENDING…" : "SEND"}
+                </button>
+              </form>
+              {chatError && (
+                <p role="alert" className="text-xs text-[#f0c0b8]">
+                  {chatError}
+                </p>
+              )}
             </div>
 
             {isRoomLeader ? (
@@ -1067,7 +1308,8 @@ function LobbyClient() {
             )}
             {playerId && lobby && !isRoomLeader && (
               <p className="text-center text-xs text-[#888888]">
-                Mark ready when you are set. Host can launch once everyone is ready.
+                Mark ready when you are set. Host can launch once everyone is
+                ready.
               </p>
             )}
           </div>
@@ -1106,13 +1348,7 @@ function LobbyClient() {
 
 function LobbyLoading() {
   return (
-    <LobbyShell
-      headerExtra="…"
-      connLine="…"
-      onLeave={() => {}}
-      leaveDisabled
-      reconnectSlot={null}
-    >
+    <LobbyShell headerExtra="…" connLine="…" onLeave={() => {}} leaveDisabled>
       <main className="flex flex-1 items-center justify-center p-8 text-[#888]">
         Loading…
       </main>

@@ -134,6 +134,8 @@ export type AttemptResponse = {
   accepted: boolean;
   reason: string | null;
   correct: boolean | null;
+  /** When the server advanced the objective due to repeated failures */
+  skipped?: boolean;
   objective_index: number;
   state_version: number;
   game_state: GameStateView;
