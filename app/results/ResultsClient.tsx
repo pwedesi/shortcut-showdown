@@ -611,16 +611,7 @@ export function ResultsClient() {
               </p>
             )}
 
-            <div className="grid grid-cols-[1fr_auto_auto] gap-3">
-              <button
-                type="button"
-                disabled={rematchState === "accepting"}
-                onClick={() => void onCreateRematch()}
-                className="flex items-center justify-center gap-2 rounded-sm border border-[#2b2b2b] bg-[#07201a] px-4 py-3 text-sm font-bold tracking-[0.12em] text-[#81c784] uppercase transition hover:bg-[#07201a]/80 disabled:opacity-50"
-              >
-                Rematch
-              </button>
-
+            <div className="grid grid-cols-[1fr_auto] gap-3">
               <button
                 type="button"
                 onClick={onNewLobby}

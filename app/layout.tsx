@@ -2,11 +2,8 @@ import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import "./globals.css";
-import { Space_Grotesk } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { Providers } from "./providers";
-
-const spaceGrotesk = Space_Grotesk({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
   title: "Shortcut Showdown",
@@ -27,7 +24,7 @@ export default function RootLayout({
         GeistSans.variable,
         GeistMono.variable,
         "font-sans",
-        spaceGrotesk.variable,
+
       )}
     >
       <body className="flex min-h-full min-h-svh flex-col overflow-x-hidden">
