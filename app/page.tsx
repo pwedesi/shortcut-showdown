@@ -33,14 +33,13 @@ export default function Home() {
   const router = useRouter();
   const { status, playerId, lastError, reconnect } = usePlayerConnection();
 
-  const [callsign, setCallsign] = useState("");
+  const [callsign, setCallsign] = useState(() => loadCallsignFromStorage());
   const [showJoin, setShowJoin] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"create" | "join" | "quickplay" | null>(null);
 
   useEffect(() => {
-    setCallsign(loadCallsignFromStorage());
     clearProtectedRoute();
   }, []);
 

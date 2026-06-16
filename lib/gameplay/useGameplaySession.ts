@@ -42,7 +42,9 @@ export function useGameplaySession({
   const [attemptInFlight, setAttemptInFlight] = useState(false);
   const navigatedRef = useRef(false);
   const onRoundFinishedRef = useRef(onRoundFinished);
-  onRoundFinishedRef.current = onRoundFinished;
+  useEffect(() => {
+    onRoundFinishedRef.current = onRoundFinished;
+  }, [onRoundFinished]);
 
   const applySnapshot = useCallback((gr: GameRoomView) => {
     setRoomView((prev) => {
@@ -157,10 +159,15 @@ export function useGameplaySession({
 
   useEffect(() => {
     navigatedRef.current = false;
-    setLoading(true);
-    setRoomView(null);
-    setLoadError(null);
-    void loadRoom("initial");
+    const initialLoad = window.setTimeout(() => {
+      setLoading(true);
+      setRoomView(null);
+      setLoadError(null);
+      void loadRoom("initial");
+    }, 0);
+    return () => {
+      window.clearTimeout(initialLoad);
+    };
   }, [loadRoom, roomId]);
 
   useWebSocketMessageListener(

@@ -22,6 +22,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -169,7 +170,7 @@ function LobbyClient() {
   } = usePlayerConnection();
 
   const lobbyIdParam = getLobbyIdFromSearchParams(searchParams);
-  const [callsign, setCallsign] = useState("");
+  const callsign = useMemo(() => loadCallsignFromStorage(), []);
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const routeAllowed = useProtectedRoute();
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -217,10 +218,6 @@ function LobbyClient() {
       return;
     }
   }, [lobbyIdParam, lobby, router, routeAllowed]);
-
-  useEffect(() => {
-    setCallsign(loadCallsignFromStorage());
-  }, []);
 
   useEffect(() => {
     if (
@@ -286,14 +283,19 @@ function LobbyClient() {
 
   useEffect(() => {
     if (!routeAllowed || !lobbyIdParam) return;
-    void refresh();
+    const initialRefresh = window.setTimeout(() => {
+      void refresh();
+    }, 0);
     if (status === "connected") {
-      return;
+      return () => window.clearTimeout(initialRefresh);
     }
     const t = window.setInterval(() => {
       void refresh();
     }, POLL_MS);
-    return () => window.clearInterval(t);
+    return () => {
+      window.clearTimeout(initialRefresh);
+      window.clearInterval(t);
+    };
   }, [lobbyIdParam, refresh, status, routeAllowed]);
 
   /**
